@@ -5,12 +5,14 @@ import { motion, AnimatePresence } from "framer-motion"
 import { format } from "date-fns"
 import {
   X, Calendar, Clock, Tag, FolderOpen, FileText,
-  StickyNote, ListChecks, ChevronDown, Check, Share2, Copy, CheckCheck,
+  StickyNote, ListChecks, ChevronDown, Check, Share2, Copy, CheckCheck, Users, Crown,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Task } from "@/lib/types"
 import { EnhancedSubtaskList } from "@/components/enhanced-subtask-list"
 import { Badge } from "@/components/ui/badge"
+import { CollaboratorPanel, CollaboratorAvatarGroup } from "@/components/collaboration/collaborator-panel"
+import { useSession } from "next-auth/react"
 
 interface TaskDetailSheetProps {
   task: Task | null
@@ -27,6 +29,7 @@ const PRIORITY_CONFIG = {
 }
 
 export function TaskDetailSheet({ task, open, onOpenChange, onUpdate }: TaskDetailSheetProps) {
+  useSession()
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [notes, setNotes] = useState("")
@@ -36,6 +39,7 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdate }: TaskDeta
   const [shareUrl, setShareUrl] = useState<string | null>(null)
   const [shareLoading, setShareLoading] = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [showCollaborators, setShowCollaborators] = useState(false)
   const titleRef = useRef<HTMLTextAreaElement>(null)
 
   const handleShare = async () => {
@@ -368,6 +372,46 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdate }: TaskDeta
                     />
                   </div>
                 )}
+
+                {/* Collaborators section */}
+                <div className="space-y-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowCollaborators(v => !v)}
+                    className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-full hover:text-foreground transition-colors"
+                  >
+                    <Users className="h-3.5 w-3.5" />
+                    Collaborators
+                    {task.collaborators && task.collaborators.length > 0 && (
+                      <CollaboratorAvatarGroup collaborators={task.collaborators} />
+                    )}
+                    {task.isCollaborated && task.ownerName && (
+                      <span className="ml-auto flex items-center gap-1 text-[10px] font-normal text-muted-foreground normal-case tracking-normal">
+                        <Crown className="h-3 w-3 text-amber-500" />
+                        {task.ownerName}
+                      </span>
+                    )}
+                    <ChevronDown className={cn("h-3.5 w-3.5 ml-auto transition-transform", showCollaborators && "rotate-180")} />
+                  </button>
+
+                  <AnimatePresence>
+                    {showCollaborators && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <CollaboratorPanel
+                          taskId={task.id}
+                          ownerId={task.ownerId ?? task.id}
+                          collaborators={task.collaborators ?? []}
+                          onUpdate={() => onUpdate(task.id, {})}
+                        />
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
 
                 {/* Timestamps */}
                 <div className="flex items-center gap-4 text-[11px] text-muted-foreground/60 pt-2 border-t border-border/30">

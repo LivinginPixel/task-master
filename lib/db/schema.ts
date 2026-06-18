@@ -78,9 +78,9 @@ export const subtasks = pgTable('subtasks', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: text('title').notNull(),
   completed: boolean('completed').default(false).notNull(),
-  task_id: uuid('task_id')
-    .notNull()
-    .references(() => tasks.id, { onDelete: 'cascade' }),
+  task_id: uuid('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
+  assigned_to: uuid('assigned_to').references(() => users.id, { onDelete: 'set null' }),
+  position: integer('position').default(0),
   created_at: timestamp('created_at').defaultNow().notNull(),
   updated_at: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -104,8 +104,13 @@ export const subtasksRelations = relations(subtasks, ({ one }) => ({
 export const taskCollaborators = pgTable("task_collaborators", {
   id: uuid("id").primaryKey().defaultRandom(),
   task_id: uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
-  user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  accepted_at: timestamp("accepted_at").defaultNow(),
+  user_id: uuid("user_id").references(() => users.id, { onDelete: "cascade" }), // null until accepted
+  invited_email: text("invited_email"),
+  invite_token: text("invite_token").unique(),
+  invite_status: text("invite_status").default("pending"), // pending | accepted | declined
+  role: text("role").default("collaborator"),
+  invited_at: timestamp("invited_at").defaultNow(),
+  accepted_at: timestamp("accepted_at"),
 });
 
 // Auth tables - using snake_case column names to match DrizzleAdapter expectations

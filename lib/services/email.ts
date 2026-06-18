@@ -155,6 +155,37 @@ export async function sendSharedTaskEmail(opts: {
   })
 }
 
+export async function sendCollaboratorInviteEmail(opts: {
+  to: string
+  recipientName?: string
+  senderName: string
+  taskTitle: string
+  taskDescription?: string
+  inviteUrl: string
+  hasAccount: boolean
+}) {
+  const { to, recipientName, senderName, taskTitle, taskDescription, inviteUrl, hasAccount } = opts
+  const first = recipientName ? recipientName.split(" ")[0] : "there"
+
+  return resend.emails.send({
+    from: FROM,
+    to,
+    subject: `${senderName} invited you to collaborate on "${taskTitle}"`,
+    html: baseTemplate(`
+      ${badge(BRAND_DARK, "#f3e8ff", "👥 Collaboration invite")}
+      <h1 style="font-size:22px;font-weight:800;line-height:1.25;margin:0 0 8px;color:#1d1d1f;">You've been invited to collaborate</h1>
+      <p style="font-size:15px;line-height:1.6;color:#555;margin:0 0 4px;">Hey ${first}, <strong>${senderName}</strong> invited you to work together on a task.</p>
+      ${taskCard(taskTitle, taskDescription)}
+      ${ctaButton("Accept invite →", inviteUrl)}
+      <p style="font-size:13px;color:#999;margin-top:16px;">
+        ${hasAccount
+          ? "You already have a Task Master account — clicking above will add this task to your dashboard."
+          : "New to Task Master? Clicking above will let you create a free account to collaborate."}
+      </p>
+    `),
+  })
+}
+
 export async function sendWelcomeEmail(opts: { to: string; userName: string }) {
   const { to, userName } = opts
   const first = userName.split(" ")[0]

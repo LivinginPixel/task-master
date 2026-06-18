@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/lib/validate-session";
 import { db } from "@/lib/db";
 import { tasks, subtasks } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as z from "zod";
 import { handleApiError } from "@/lib/errors";
 import { mapTaskToCamelCase, isTaskOverdue } from "@/lib/utils";
@@ -32,25 +32,111 @@ const taskSchema = z.object({
   })).optional(),
 });
 
-// GET /api/tasks - Get all tasks for the current user
+// GET /api/tasks - Get all tasks the user owns OR is an accepted collaborator on
 export async function GET() {
   try {
     const session = await getValidatedSession();
-
-    // First, update any overdue tasks
     await updateOverdueTasks();
 
-    const userTasks = await db.query.tasks.findMany({
-      where: eq(tasks.user_id, session.user.id),
-      orderBy: [tasks.position, tasks.created_at],
-      with: {
-        subtasks: true,
-      },
-    });
+    // 1. Own tasks with collaborators + subtasks (with assignee info)
+    const ownTasks = await db.execute(sql`
+      SELECT
+        t.*,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object(
+            'id', tc.id,
+            'userId', tc.user_id,
+            'invitedEmail', tc.invited_email,
+            'inviteStatus', tc.invite_status,
+            'role', tc.role,
+            'name', u_collab.name,
+            'image', u_collab.image,
+            'acceptedAt', tc.accepted_at
+          )) FILTER (WHERE tc.id IS NOT NULL), '[]'
+        ) as collaborators,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object(
+            'id', st.id,
+            'title', st.title,
+            'completed', st.completed,
+            'task_id', st.task_id,
+            'assignedTo', st.assigned_to,
+            'assigneeName', u_assign.name,
+            'assigneeImage', u_assign.image
+          )) FILTER (WHERE st.id IS NOT NULL), '[]'
+        ) as subtasks
+      FROM tasks t
+      LEFT JOIN task_collaborators tc ON tc.task_id = t.id
+      LEFT JOIN users u_collab ON u_collab.id = tc.user_id
+      LEFT JOIN subtasks st ON st.task_id = t.id
+      LEFT JOIN users u_assign ON u_assign.id = st.assigned_to
+      WHERE t.user_id = ${session.user.id}
+      GROUP BY t.id
+      ORDER BY t.position, t.created_at
+    `)
 
-    const tasksForFrontend = userTasks.map(mapTaskToCamelCase);
+    // 2. Collaborated tasks (tasks owned by others where I'm an accepted collaborator)
+    const collabTasks = await db.execute(sql`
+      SELECT
+        t.*,
+        u_owner.name as owner_name,
+        u_owner.image as owner_image,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object(
+            'id', tc2.id,
+            'userId', tc2.user_id,
+            'invitedEmail', tc2.invited_email,
+            'inviteStatus', tc2.invite_status,
+            'role', tc2.role,
+            'name', u_collab2.name,
+            'image', u_collab2.image,
+            'acceptedAt', tc2.accepted_at
+          )) FILTER (WHERE tc2.id IS NOT NULL), '[]'
+        ) as collaborators,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object(
+            'id', st.id,
+            'title', st.title,
+            'completed', st.completed,
+            'task_id', st.task_id,
+            'assignedTo', st.assigned_to,
+            'assigneeName', u_assign.name,
+            'assigneeImage', u_assign.image
+          )) FILTER (WHERE st.id IS NOT NULL), '[]'
+        ) as subtasks
+      FROM task_collaborators tc
+      JOIN tasks t ON t.id = tc.task_id
+      JOIN users u_owner ON u_owner.id = t.user_id
+      LEFT JOIN task_collaborators tc2 ON tc2.task_id = t.id
+      LEFT JOIN users u_collab2 ON u_collab2.id = tc2.user_id
+      LEFT JOIN subtasks st ON st.task_id = t.id
+      LEFT JOIN users u_assign ON u_assign.id = st.assigned_to
+      WHERE tc.user_id = ${session.user.id}
+        AND tc.invite_status = 'accepted'
+        AND t.user_id != ${session.user.id}
+      GROUP BY t.id, u_owner.name, u_owner.image
+      ORDER BY t.created_at
+    `)
 
-    return NextResponse.json(tasksForFrontend);
+    const mapRow = (row: Record<string, unknown>, isCollaborated = false) => {
+      const base = mapTaskToCamelCase(row)
+      return {
+        ...base,
+        isCollaborated,
+        ownerId: row.user_id as string,
+        ownerName: isCollaborated ? (row.owner_name as string | null) : null,
+        ownerImage: isCollaborated ? (row.owner_image as string | null) : null,
+        collaborators: row.collaborators as unknown[],
+        subtasks: (row.subtasks as unknown[]),
+      }
+    }
+
+    const allTasks = [
+      ...ownTasks.rows.map(r => mapRow(r as Record<string, unknown>, false)),
+      ...collabTasks.rows.map(r => mapRow(r as Record<string, unknown>, true)),
+    ]
+
+    return NextResponse.json(allTasks);
   } catch (error) {
     return handleApiError(error);
   }

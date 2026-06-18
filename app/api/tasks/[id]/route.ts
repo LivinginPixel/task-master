@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getValidatedSession } from "@/lib/validate-session";
 import { db } from "@/lib/db";
-import { tasks, subtasks } from "@/lib/db/schema";
+import { tasks, subtasks, taskCollaborators } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import { mapTaskToCamelCase, isTaskOverdue } from "@/lib/utils";
 import { handleApiError } from "@/lib/errors";
 import { isTaskLocked } from "@/lib/task-utils";
+import { sendTaskPush } from "@/lib/services/push";
 
 /**
  * Advance a date by the recurrence interval, preserving the time-of-day.
@@ -108,13 +109,25 @@ export async function PATCH(
       }));
     }
 
-    // Get current task to check lock status
+    // Get current task — owner OR accepted collaborator can update
     const currentTask = await db.query.tasks.findFirst({
-      where: and(eq(tasks.id, params.id), eq(tasks.user_id, userId))
+      where: eq(tasks.id, params.id),
     });
 
     if (!currentTask) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
+    }
+
+    const isOwner = currentTask.user_id === userId
+    if (!isOwner) {
+      const [collab] = await db.select({ id: taskCollaborators.id })
+        .from(taskCollaborators)
+        .where(and(
+          eq(taskCollaborators.task_id, params.id),
+          eq(taskCollaborators.user_id, userId),
+          eq(taskCollaborators.invite_status, "accepted")
+        )).limit(1)
+      if (!collab) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     // Check if task is locked (overdue and locked_after_due is true)
@@ -391,9 +404,24 @@ export async function PATCH(
       }
     }
 
+    if (!updatedTask) return NextResponse.json({ error: "Task not found after update" }, { status: 404 })
+
+    // Notify accepted collaborators that the task was updated
+    const collabs = await db.select({ user_id: taskCollaborators.user_id })
+      .from(taskCollaborators)
+      .where(and(
+        eq(taskCollaborators.task_id, params.id),
+        eq(taskCollaborators.invite_status, "accepted")
+      ))
+    for (const c of collabs) {
+      if (c.user_id && c.user_id !== session.user.id) {
+        sendTaskPush(c.user_id, "completed", updatedTask.title, updatedTask.id).catch(() => {})
+      }
+    }
+
     return NextResponse.json(mapTaskToCamelCase(updatedTask));
   } catch (error) {
-    
+
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Validation error", details: error.errors },

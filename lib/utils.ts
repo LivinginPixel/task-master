@@ -29,6 +29,11 @@ export function mapTaskToCamelCase(task: any) {
     shareToken: task.share_token ?? null,
     deferCount: task.defer_count ?? 0,
     procrastinationReason: task.procrastination_reason ?? null,
+    isCollaborated: task.isCollaborated ?? false,
+    ownerId: task.user_id,
+    ownerName: task.owner_name ?? null,
+    ownerImage: task.owner_image ?? null,
+    collaborators: task.collaborators ?? [],
   }
 }
 

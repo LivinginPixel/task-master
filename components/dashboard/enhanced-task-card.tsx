@@ -378,6 +378,11 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
                           🔗 Shared
                         </span>
                       )}
+                      {task.isCollaborated && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                          👥 {task.ownerName ? `from ${task.ownerName.split(" ")[0]}` : "Shared with me"}
+                        </span>
+                      )}
                     </div>
                   )}
 
