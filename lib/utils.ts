@@ -33,6 +33,8 @@ export function mapTaskToCamelCase(task: any) {
     ownerId: task.user_id,
     ownerName: task.owner_name ?? null,
     ownerImage: task.owner_image ?? null,
+    completedByName: task.completed_by_name ?? null,
+    completedByImage: task.completed_by_image ?? null,
     collaborators: task.collaborators ?? [],
   }
 }

@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 import type { Task } from "@/lib/types"
 import { EnhancedSubtaskList } from "@/components/enhanced-subtask-list"
 import { DeleteTaskDialog } from "./delete-task-dialog"
+import { CompletionSignature } from "@/components/completion-signature"
 
 interface EnhancedTaskCardProps {
   task: Task
@@ -336,6 +337,16 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
                       {task.title}
                     </span>
                   </div>
+
+                  {/* Who completed this task */}
+                  {isCompleted && task.completedByName && (
+                    <CompletionSignature
+                      name={task.completedByName}
+                      image={task.completedByImage}
+                      completedAt={task.completedAt}
+                      variant="inline"
+                    />
+                  )}
 
                   {/* Category + tag chips */}
                   {showChips && (

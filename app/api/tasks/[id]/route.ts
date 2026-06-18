@@ -277,19 +277,22 @@ export async function PATCH(
       
       updateData.status = newStatus;
 
-      // PENDING → COMPLETED: set completed_at, clear overdue_at
+      // PENDING → COMPLETED: set completed_at + completed_by, clear overdue_at
       if (oldStatus === "PENDING" && newStatus === "COMPLETED") {
         updateData.completed_at = now;
+        updateData.completed_by = userId;
         updateData.overdue_at = null;
       }
-      // OVERDUE → COMPLETED: set completed_at, clear overdue_at
+      // OVERDUE → COMPLETED: set completed_at + completed_by, clear overdue_at
       else if (oldStatus === "OVERDUE" && newStatus === "COMPLETED") {
         updateData.completed_at = now;
+        updateData.completed_by = userId;
         updateData.overdue_at = null;
       }
-      // COMPLETED → PENDING: clear completed_at, clear overdue_at if any
+      // COMPLETED → PENDING: clear completed_at + completed_by, clear overdue_at if any
       else if (oldStatus === "COMPLETED" && newStatus === "PENDING") {
         updateData.completed_at = null;
+        updateData.completed_by = null;
         updateData.overdue_at = null;
       }
       // OVERDUE → PENDING: clear overdue_at (when due_date extended)
@@ -354,14 +357,47 @@ export async function PATCH(
     // Subtasks can always be edited on overdue tasks (matching ClickUp/Todoist behaviour).
     // Only COMPLETED tasks lock their subtasks (enforced on the client side).
     if (validatedData.subtasks !== undefined) {
-      // Remove old subtasks for this task
+      // Fetch existing subtasks to preserve completed_by / completed_at when completion state unchanged
+      const existingSubtasks = await db.select({
+        id: subtasks.id,
+        completed: subtasks.completed,
+        completed_by: subtasks.completed_by,
+        completed_at: subtasks.completed_at,
+      }).from(subtasks).where(eq(subtasks.task_id, params.id))
+
+      const existingMap = new Map(existingSubtasks.map(s => [s.id, s]))
+
       await db.delete(subtasks).where(eq(subtasks.task_id, params.id));
-      // Insert new subtasks
+
       if (validatedData.subtasks.length > 0) {
-        await db.insert(subtasks).values(validatedData.subtasks.map(st => ({
-          ...st,
-          task_id: params.id
-        })));
+        await db.insert(subtasks).values(validatedData.subtasks.map(st => {
+          const old = existingMap.get(st.id)
+          const wasCompleted = old?.completed ?? false
+          const isNowCompleted = st.completed
+
+          let completedBy: string | null = null
+          let completedAt: Date | null = null
+
+          if (isNowCompleted && !wasCompleted) {
+            // Newly completed — stamp current user
+            completedBy = userId
+            completedAt = now
+          } else if (isNowCompleted && wasCompleted) {
+            // Still completed — preserve original completer
+            completedBy = old?.completed_by ?? null
+            completedAt = old?.completed_at ?? null
+          }
+          // if !isNowCompleted: leave null (unchecked)
+
+          return {
+            id: st.id,
+            title: st.title,
+            completed: st.completed,
+            task_id: params.id,
+            completed_by: completedBy,
+            completed_at: completedAt,
+          }
+        }));
       }
     }
 

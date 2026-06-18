@@ -12,6 +12,7 @@ import type { Task } from "@/lib/types"
 import { EnhancedSubtaskList } from "@/components/enhanced-subtask-list"
 import { Badge } from "@/components/ui/badge"
 import { CollaboratorPanel, CollaboratorAvatarGroup } from "@/components/collaboration/collaborator-panel"
+import { CompletionSignature } from "@/components/completion-signature"
 import { useSession } from "next-auth/react"
 
 interface TaskDetailSheetProps {
@@ -412,6 +413,16 @@ export function TaskDetailSheet({ task, open, onOpenChange, onUpdate }: TaskDeta
                     )}
                   </AnimatePresence>
                 </div>
+
+                {/* Completion attribution footer */}
+                {isCompleted && task.completedByName && (
+                  <CompletionSignature
+                    name={task.completedByName}
+                    image={task.completedByImage}
+                    completedAt={task.completedAt}
+                    variant="footer"
+                  />
+                )}
 
                 {/* Timestamps */}
                 <div className="flex items-center gap-4 text-[11px] text-muted-foreground/60 pt-2 border-t border-border/30">

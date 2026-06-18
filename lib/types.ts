@@ -28,6 +28,9 @@ export interface Task {
   shareToken?: string | null;
   deferCount?: number;
   procrastinationReason?: string | null;
+  // Completion attribution
+  completedByName?: string | null;
+  completedByImage?: string | null;
   // Collaboration
   isCollaborated?: boolean;        // true if this task was shared with me (I'm not the owner)
   ownerId?: string;
@@ -43,6 +46,10 @@ export interface Task {
     assignedTo?: string | null;
     assigneeName?: string | null;
     assigneeImage?: string | null;
+    completedBy?: string | null;
+    completedByName?: string | null;
+    completedByImage?: string | null;
+    completedAt?: string | null;
   }[];
   attachments?: string[];
   createdAt: string;
@@ -68,6 +75,10 @@ export interface Subtask {
   assignedTo?: string | null
   assigneeName?: string | null
   assigneeImage?: string | null
+  completedBy?: string | null
+  completedByName?: string | null
+  completedByImage?: string | null
+  completedAt?: string | null
 }
 
 export interface TaskFormData extends Omit<Task, 'id' | 'createdAt' | 'attachments'> {

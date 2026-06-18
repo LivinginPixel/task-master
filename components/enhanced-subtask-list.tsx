@@ -12,6 +12,7 @@ import type { Subtask } from "@/lib/types"
 import { v4 as uuidv4 } from "uuid"
 import { cn } from "@/lib/utils"
 import type { TaskCardVariant } from "@/components/enhanced-task-card"
+import { CompletionSignature } from "@/components/completion-signature"
 
 interface EnhancedSubtaskListProps {
   subtasks: Subtask[]
@@ -163,10 +164,10 @@ export function EnhancedSubtaskList({
                 >
                   <div className="space-y-2 pt-2">
                     {completedSubtasks.map((subtask) => (
-                      <div 
-                        key={subtask.id} 
+                      <div
+                        key={subtask.id}
                         className={cn(
-                          "flex items-center gap-2 group",
+                          "flex items-start gap-2 group",
                           variantStyles.subtaskItem
                         )}
                       >
@@ -174,22 +175,32 @@ export function EnhancedSubtaskList({
                           checked={true}
                           onCheckedChange={(checked) => onToggle(subtask.id, !!checked)}
                           id={`completed-subtask-${subtask.id}`}
-                          className="flex-shrink-0"
+                          className="flex-shrink-0 mt-0.5"
                         />
-                        <label
-                          htmlFor={`completed-subtask-${subtask.id}`}
-                          className={cn(
-                            "flex-1 text-sm cursor-pointer line-through text-muted-foreground",
-                            "hover:text-foreground transition-colors"
+                        <div className="flex-1 min-w-0">
+                          <label
+                            htmlFor={`completed-subtask-${subtask.id}`}
+                            className={cn(
+                              "block text-sm cursor-pointer line-through text-muted-foreground",
+                              "hover:text-foreground transition-colors"
+                            )}
+                          >
+                            {subtask.title}
+                          </label>
+                          {subtask.completedByName && (
+                            <CompletionSignature
+                              name={subtask.completedByName}
+                              image={subtask.completedByImage}
+                              completedAt={subtask.completedAt ?? undefined}
+                              variant="inline"
+                            />
                           )}
-                        >
-                          {subtask.title}
-                        </label>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => onDelete(subtask.id)} 
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onDelete(subtask.id)}
+                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                           <span className="sr-only">Delete</span>

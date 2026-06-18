@@ -38,10 +38,12 @@ export async function GET() {
     const session = await getValidatedSession();
     await updateOverdueTasks();
 
-    // 1. Own tasks with collaborators + subtasks (with assignee info)
+    // 1. Own tasks with collaborators + subtasks (with assignee + completer info)
     const ownTasks = await db.execute(sql`
       SELECT
         t.*,
+        u_completer.name as completed_by_name,
+        u_completer.image as completed_by_image,
         COALESCE(
           json_agg(DISTINCT jsonb_build_object(
             'id', tc.id,
@@ -62,16 +64,22 @@ export async function GET() {
             'task_id', st.task_id,
             'assignedTo', st.assigned_to,
             'assigneeName', u_assign.name,
-            'assigneeImage', u_assign.image
+            'assigneeImage', u_assign.image,
+            'completedBy', st.completed_by,
+            'completedByName', u_st_completer.name,
+            'completedByImage', u_st_completer.image,
+            'completedAt', st.completed_at
           )) FILTER (WHERE st.id IS NOT NULL), '[]'
         ) as subtasks
       FROM tasks t
+      LEFT JOIN users u_completer ON u_completer.id = t.completed_by
       LEFT JOIN task_collaborators tc ON tc.task_id = t.id
       LEFT JOIN users u_collab ON u_collab.id = tc.user_id
       LEFT JOIN subtasks st ON st.task_id = t.id
       LEFT JOIN users u_assign ON u_assign.id = st.assigned_to
+      LEFT JOIN users u_st_completer ON u_st_completer.id = st.completed_by
       WHERE t.user_id = ${session.user.id}
-      GROUP BY t.id
+      GROUP BY t.id, u_completer.name, u_completer.image
       ORDER BY t.position, t.created_at
     `)
 
@@ -81,6 +89,8 @@ export async function GET() {
         t.*,
         u_owner.name as owner_name,
         u_owner.image as owner_image,
+        u_completer.name as completed_by_name,
+        u_completer.image as completed_by_image,
         COALESCE(
           json_agg(DISTINCT jsonb_build_object(
             'id', tc2.id,
@@ -101,20 +111,26 @@ export async function GET() {
             'task_id', st.task_id,
             'assignedTo', st.assigned_to,
             'assigneeName', u_assign.name,
-            'assigneeImage', u_assign.image
+            'assigneeImage', u_assign.image,
+            'completedBy', st.completed_by,
+            'completedByName', u_st_completer.name,
+            'completedByImage', u_st_completer.image,
+            'completedAt', st.completed_at
           )) FILTER (WHERE st.id IS NOT NULL), '[]'
         ) as subtasks
       FROM task_collaborators tc
       JOIN tasks t ON t.id = tc.task_id
       JOIN users u_owner ON u_owner.id = t.user_id
+      LEFT JOIN users u_completer ON u_completer.id = t.completed_by
       LEFT JOIN task_collaborators tc2 ON tc2.task_id = t.id
       LEFT JOIN users u_collab2 ON u_collab2.id = tc2.user_id
       LEFT JOIN subtasks st ON st.task_id = t.id
       LEFT JOIN users u_assign ON u_assign.id = st.assigned_to
+      LEFT JOIN users u_st_completer ON u_st_completer.id = st.completed_by
       WHERE tc.user_id = ${session.user.id}
         AND tc.invite_status = 'accepted'
         AND t.user_id != ${session.user.id}
-      GROUP BY t.id, u_owner.name, u_owner.image
+      GROUP BY t.id, u_owner.name, u_owner.image, u_completer.name, u_completer.image
       ORDER BY t.created_at
     `)
 
@@ -126,6 +142,8 @@ export async function GET() {
         ownerId: row.user_id as string,
         ownerName: isCollaborated ? (row.owner_name as string | null) : null,
         ownerImage: isCollaborated ? (row.owner_image as string | null) : null,
+        completedByName: row.completed_by_name as string | null ?? null,
+        completedByImage: row.completed_by_image as string | null ?? null,
         collaborators: row.collaborators as unknown[],
         subtasks: (row.subtasks as unknown[]),
       }
