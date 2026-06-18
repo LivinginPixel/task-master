@@ -6,8 +6,8 @@ const FROM = "TaskMaster <onboarding@resend.dev>"
 const BRAND = "#bb67e4"
 const BRAND_DARK = "#9333ea"
 // Always use the production Vercel URL for email images — data: URIs are blocked by Gmail/Outlook
-const LOGO_URL = "https://task-master-quick.vercel.app/logo.png"
-const APP_URL = process.env.NEXTAUTH_URL ?? "https://task-master-quick.vercel.app"
+const LOGO_URL = "https://taskmasstar.vercel.app/logo.png"
+const APP_URL = process.env.NEXTAUTH_URL ?? "https://taskmasstar.vercel.app"
 
 function baseTemplate(content: string) {
   return `<!DOCTYPE html>
