@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { format } from "date-fns"
 import {
   CheckCircle2, Circle, Calendar, Clock, Tag, Users,
-  ExternalLink, UserPlus, Share2, ArrowRight, Loader2, CheckSquare,
+  UserPlus, Share2, ArrowRight, Loader2, CheckSquare,
 } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
@@ -109,23 +109,14 @@ export function SharedTaskView({ token }: { token: string }) {
             <span className="font-bold text-sm">Task Master</span>
           </Link>
 
-          {!session ? (
+          {!session && (
             <Link
               href={`/auth/sign-in?callbackUrl=/share/${token}`}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
             >
               <UserPlus className="h-3.5 w-3.5" />
-              Sign in to join
+              Sign in
             </Link>
-          ) : (
-            <button
-              onClick={handleJoin}
-              disabled={joining}
-              className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
-              {joining ? "Opening…" : "Open on my dashboard"}
-            </button>
           )}
         </div>
       </div>
