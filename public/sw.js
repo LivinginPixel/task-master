@@ -68,17 +68,34 @@ self.addEventListener('notificationclick', (event) => {
 // ─── Messages from main thread ────────────────────────────────────────────────
 self.addEventListener('message', (event) => {
   const { type } = event.data || {};
+
+  // All async work must be wrapped in event.waitUntil() so the browser
+  // doesn't garbage-collect the promise mid-flight (avoids "went out of scope" error)
   if (type === 'SCHEDULE_NOTIFICATION') {
     const { taskId, notificationType, scheduledTime, task } = event.data;
-    storeNotification(taskId, notificationType, scheduledTime, task);
     const delay = scheduledTime - Date.now();
-    if (delay > 0) setTimeout(() => { fireNotification(task, notificationType); cancelNotification(taskId, notificationType); }, delay);
-    else if (delay > -60000) { fireNotification(task, notificationType); cancelNotification(taskId, notificationType); }
+    event.waitUntil(
+      storeNotification(taskId, notificationType, scheduledTime, task).then(() => {
+        if (delay <= 0 && delay > -60000) {
+          return fireNotification(task, notificationType)
+            .then(() => cancelNotification(taskId, notificationType));
+        } else if (delay > 0) {
+          setTimeout(() => {
+            fireNotification(task, notificationType).catch(() => {});
+            cancelNotification(taskId, notificationType).catch(() => {});
+          }, delay);
+        }
+      }).catch(() => {})
+    );
   } else if (type === 'CANCEL_NOTIFICATION') {
-    cancelNotification(event.data.taskId, event.data.notificationType);
-  } else if (type === 'CLEAR_ALL_NOTIFICATIONS') { clearAllNotifications(); }
-  else if (type === 'SYNC_NOTIFICATIONS') { syncStoredNotifications(); }
-  else if (type === 'SKIP_WAITING') { self.skipWaiting(); }
+    event.waitUntil(cancelNotification(event.data.taskId, event.data.notificationType).catch(() => {}));
+  } else if (type === 'CLEAR_ALL_NOTIFICATIONS') {
+    event.waitUntil(clearAllNotifications().catch(() => {}));
+  } else if (type === 'SYNC_NOTIFICATIONS') {
+    event.waitUntil(syncStoredNotifications().catch(() => {}));
+  } else if (type === 'SKIP_WAITING') {
+    event.waitUntil(self.skipWaiting());
+  }
 });
 
 setInterval(() => syncStoredNotifications().catch(() => {}), 60000);
