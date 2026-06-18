@@ -1,50 +1,37 @@
 import { Resend } from "resend"
-import { readFileSync } from "fs"
-import { join } from "path"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = "TaskMaster <onboarding@resend.dev>"
 
 const BRAND = "#bb67e4"
 const BRAND_DARK = "#9333ea"
+// Always use the production Vercel URL for email images — data: URIs are blocked by Gmail/Outlook
+const LOGO_URL = "https://task-master-quick.vercel.app/logo.png"
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://task-master-quick.vercel.app"
 
-// Embed logo as base64 so it renders in all email clients regardless of environment
-function getLogoDataUri(): string {
-  try {
-    const logoPath = join(process.cwd(), "public", "logo.png")
-    const data = readFileSync(logoPath).toString("base64")
-    return `data:image/png;base64,${data}`
-  } catch {
-    return ""
-  }
-}
-
 function baseTemplate(content: string) {
-  const logoSrc = getLogoDataUri()
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>TaskMaster</title>
+  <title>Task Master</title>
 </head>
 <body style="margin:0;padding:0;background:#f2f2f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1d1d1f;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background:#f2f2f7;padding:40px 16px;">
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
 
-        <!-- Header -->
+        <!-- Header — mirrors the app nav: logo.png + "Task Master" -->
         <tr>
           <td style="background:linear-gradient(135deg,${BRAND_DARK},${BRAND});padding:28px 32px;">
-            <table cellpadding="0" cellspacing="0" width="100%">
+            <table cellpadding="0" cellspacing="0">
               <tr>
-                ${logoSrc ? `<td style="width:44px;vertical-align:middle;">
-                  <img src="${logoSrc}" alt="TaskMaster" width="40" height="40" style="border-radius:10px;display:block;">
-                </td>` : ""}
-                <td style="padding-left:${logoSrc ? "12" : "0"}px;vertical-align:middle;">
-                  <span style="font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Task<span style="font-weight:400;opacity:0.8;">Master</span></span>
+                <td style="vertical-align:middle;">
+                  <img src="${LOGO_URL}" alt="Task Master" width="36" height="36" style="display:block;border-radius:8px;">
+                </td>
+                <td style="padding-left:10px;vertical-align:middle;">
+                  <span style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">Task Master</span>
                 </td>
               </tr>
             </table>
