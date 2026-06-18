@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useSession } from "next-auth/react"
+import { useRouter, usePathname } from "next/navigation"
 import { Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -25,6 +26,8 @@ interface NotificationItem {
 
 export function NotificationBell() {
   const { data: session } = useSession()
+  const router = useRouter()
+  const pathname = usePathname()
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [open, setOpen] = useState(false)
@@ -218,8 +221,16 @@ export function NotificationBell() {
                     onClick={() => {
                       markAsRead(notification.id)
                       setOpen(false)
-                      // Navigate to task if needed
-                      window.location.href = `/dashboard`
+                      const taskId = notification.taskId
+                      if (pathname === "/dashboard") {
+                        // Already on dashboard — just open the task sheet
+                        if (taskId) {
+                          window.dispatchEvent(new CustomEvent("tm:open-task", { detail: { taskId } }))
+                        }
+                      } else {
+                        // Navigate without reload, then open sheet after mount
+                        router.push(taskId ? `/dashboard?task=${taskId}` : "/dashboard")
+                      }
                     }}
                     className={cn(
                       "w-full text-left p-3 sm:p-4 hover:bg-muted/50 transition-colors active:bg-muted",

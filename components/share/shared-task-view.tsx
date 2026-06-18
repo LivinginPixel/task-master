@@ -3,10 +3,24 @@
 import { useEffect, useState, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { format } from "date-fns"
-import { CheckCircle2, Circle, Calendar, Clock, Tag, Users, CheckSquare, ExternalLink, UserPlus, Share2 } from "lucide-react"
+import {
+  CheckCircle2, Circle, Calendar, Clock, Tag, Users,
+  CheckSquare, ExternalLink, UserPlus, Share2, ArrowRight, Loader2,
+} from "lucide-react"
 import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { CompletionSignature } from "@/components/completion-signature"
 import Link from "next/link"
+
+interface SubtaskRow {
+  id: string
+  title: string
+  completed: boolean
+  completed_by_name?: string | null
+  completed_by_image?: string | null
+  completed_at?: string | null
+}
 
 interface SharedTask {
   id: string
@@ -17,7 +31,10 @@ interface SharedTask {
   due_date: string | null
   due_time: string | null
   tags: string[] | null
-  subtasks: { id: string; title: string; completed: boolean }[]
+  subtasks: SubtaskRow[]
+  completed_by_name?: string | null
+  completed_by_image?: string | null
+  completed_at?: string | null
 }
 
 const PRIORITY_CONFIG = {
@@ -29,15 +46,13 @@ const PRIORITY_CONFIG = {
 
 export function SharedTaskView({ token }: { token: string }) {
   const { data: session } = useSession()
+  const router = useRouter()
   const [task, setTask] = useState<SharedTask | null>(null)
   const [owner, setOwner] = useState<{ name: string | null; image: string | null } | null>(null)
   const [collaboratorCount, setCollaboratorCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [joining, setJoining] = useState(false)
-  const [joined, setJoined] = useState(false)
-  const [subtasks, setSubtasks] = useState<SharedTask["subtasks"]>([])
-  const [completing, setCompleting] = useState(false)
 
   const fetchTask = useCallback(async () => {
     const res = await fetch(`/api/share/${token}`)
@@ -46,42 +61,20 @@ export function SharedTaskView({ token }: { token: string }) {
     setTask(data.task)
     setOwner(data.owner)
     setCollaboratorCount(data.collaboratorCount)
-    setSubtasks(data.task.subtasks ?? [])
     setLoading(false)
   }, [token])
 
   useEffect(() => { fetchTask() }, [fetchTask])
 
-  const handleToggleSubtask = async (id: string) => {
-    if (!task) return
-    const updated = subtasks.map(s => s.id === id ? { ...s, completed: !s.completed } : s)
-    setSubtasks(updated)
-    await fetch(`/api/share/${token}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subtasks: updated }),
-    })
-  }
-
-  const handleComplete = async () => {
-    if (!task || completing) return
-    setCompleting(true)
-    await fetch(`/api/share/${token}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "COMPLETED", completed_at: new Date().toISOString() }),
-    })
-    setTask(t => t ? { ...t, status: "COMPLETED" } : t)
-    setCompleting(false)
-  }
-
   const handleJoin = async () => {
     if (!session) return
     setJoining(true)
-    await fetch(`/api/share/${token}`, { method: "POST" })
-    setJoined(true)
-    setCollaboratorCount(c => c + 1)
+    const res = await fetch(`/api/share/${token}`, { method: "POST" })
+    const data = await res.json()
     setJoining(false)
+    if (data.taskId) {
+      router.push(`/dashboard?task=${data.taskId}`)
+    }
   }
 
   if (loading) return (
@@ -103,38 +96,36 @@ export function SharedTaskView({ token }: { token: string }) {
 
   const priority = PRIORITY_CONFIG[task.priority]
   const isCompleted = task.status === "COMPLETED"
+  const subtasks = task.subtasks ?? []
   const completedSubs = subtasks.filter(s => s.completed).length
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-16">
-      {/* Header bar */}
+      {/* Header */}
       <div className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-xl">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <CheckSquare className="h-5 w-5 text-accent" />
-            <span className="font-bold text-sm">TaskMaster</span>
+            <span className="font-bold text-sm">Task Master</span>
           </Link>
+
           {!session ? (
             <Link
               href={`/auth/sign-in?callbackUrl=/share/${token}`}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
             >
               <UserPlus className="h-3.5 w-3.5" />
-              Sign in to collaborate
+              Sign in to join
             </Link>
-          ) : !joined ? (
+          ) : (
             <button
               onClick={handleJoin}
               disabled={joining}
               className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              <UserPlus className="h-3.5 w-3.5" />
-              {joining ? "Joining…" : "Add to my dashboard"}
+              {joining ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+              {joining ? "Opening…" : "Open on my dashboard"}
             </button>
-          ) : (
-            <Link href="/dashboard" className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-accent text-accent hover:bg-accent/10 transition-colors">
-              <ExternalLink className="h-3.5 w-3.5" />
-              Go to dashboard
-            </Link>
           )}
         </div>
       </div>
@@ -163,10 +154,7 @@ export function SharedTaskView({ token }: { token: string }) {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-          className={cn(
-            "rounded-3xl border bg-card p-6 space-y-5 shadow-sm",
-            priority.border
-          )}
+          className={cn("rounded-3xl border bg-card p-6 space-y-5 shadow-sm", priority.border)}
         >
           {/* Priority + Status */}
           <div className="flex items-center gap-2">
@@ -186,6 +174,16 @@ export function SharedTaskView({ token }: { token: string }) {
           <h1 className={cn("text-2xl font-extrabold leading-tight tracking-tight", isCompleted && "line-through text-muted-foreground")}>
             {task.title}
           </h1>
+
+          {/* Task completion attribution */}
+          {isCompleted && task.completed_by_name && (
+            <CompletionSignature
+              name={task.completed_by_name}
+              image={task.completed_by_image}
+              completedAt={task.completed_at ?? undefined}
+              variant="footer"
+            />
+          )}
 
           {/* Description */}
           {task.description && (
@@ -213,13 +211,11 @@ export function SharedTaskView({ token }: { token: string }) {
             ))}
           </div>
 
-          {/* Subtasks */}
+          {/* Subtasks — read-only preview with completer avatars */}
           {subtasks.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Subtasks
-                </p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Subtasks</p>
                 <span className="text-xs font-bold text-foreground">{completedSubs}/{subtasks.length}</span>
               </div>
               {/* Progress bar */}
@@ -231,66 +227,83 @@ export function SharedTaskView({ token }: { token: string }) {
                   transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
                 />
               </div>
-              <div className="space-y-1.5 pt-1">
+              <div className="space-y-1 pt-1">
                 {subtasks.map(sub => (
-                  <button
+                  <div
                     key={sub.id}
-                    onClick={() => session ? handleToggleSubtask(sub.id) : null}
-                    disabled={!session || isCompleted}
-                    className={cn(
-                      "w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-colors",
-                      session && !isCompleted ? "hover:bg-muted/60 cursor-pointer" : "cursor-default",
-                    )}
+                    className="flex items-start gap-3 p-2.5 rounded-xl"
                   >
                     <AnimatePresence mode="wait">
                       {sub.completed ? (
-                        <motion.div key="done" initial={{ scale: 0.6 }} animate={{ scale: 1 }}>
+                        <motion.div key="done" initial={{ scale: 0.6 }} animate={{ scale: 1 }} className="mt-0.5">
                           <CheckCircle2 className="h-4 w-4 text-accent shrink-0" />
                         </motion.div>
                       ) : (
-                        <Circle className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                        <Circle className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-0.5" />
                       )}
                     </AnimatePresence>
-                    <span className={cn("text-sm", sub.completed && "line-through text-muted-foreground")}>
-                      {sub.title}
-                    </span>
-                  </button>
+                    <div className="flex-1 min-w-0">
+                      <span className={cn("text-sm block", sub.completed && "line-through text-muted-foreground")}>
+                        {sub.title}
+                      </span>
+                      {sub.completed && sub.completed_by_name && (
+                        <CompletionSignature
+                          name={sub.completed_by_name}
+                          image={sub.completed_by_image}
+                          completedAt={sub.completed_at ?? undefined}
+                          variant="inline"
+                        />
+                      )}
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Complete button */}
-          {!isCompleted && session && (
-            <button
-              onClick={handleComplete}
-              disabled={completing}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-accent text-accent-foreground font-semibold text-sm hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-50"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {completing ? "Marking complete…" : "Mark task as complete"}
-            </button>
-          )}
-
-          {/* Not signed in — CTA */}
-          {!session && !isCompleted && (
-            <div className="rounded-2xl border border-dashed border-border p-4 text-center space-y-2">
-              <p className="text-sm font-semibold">Want to update this task?</p>
-              <p className="text-xs text-muted-foreground">Sign in or create a free account to tick subtasks, mark complete, and track shared tasks on your dashboard.</p>
-              <Link
-                href={`/auth/sign-in?callbackUrl=/share/${token}`}
-                className="inline-flex items-center gap-1.5 mt-1 text-xs font-bold px-4 py-2 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+          {/* Join CTA */}
+          <AnimatePresence>
+            {!isCompleted && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="pt-1"
               >
-                <UserPlus className="h-3.5 w-3.5" />
-                Sign up free
-              </Link>
-            </div>
-          )}
+                {session ? (
+                  <button
+                    onClick={handleJoin}
+                    disabled={joining}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-accent text-accent-foreground font-semibold text-sm hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-50"
+                  >
+                    {joining ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4" />
+                    )}
+                    {joining ? "Adding to your dashboard…" : "Join & manage on your dashboard"}
+                  </button>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-border p-5 text-center space-y-3">
+                    <p className="text-sm font-semibold">{owner?.name ?? "Someone"} invited you to collaborate</p>
+                    <p className="text-xs text-muted-foreground">Sign in to join this task. It will appear on your dashboard where you can mark subtasks, add notes, and track progress together.</p>
+                    <Link
+                      href={`/auth/sign-in?callbackUrl=/share/${token}`}
+                      className="inline-flex items-center gap-1.5 mt-1 text-xs font-bold px-5 py-2.5 rounded-full bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Sign in to join
+                    </Link>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {isCompleted && (
             <div className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-sm font-semibold">
               <CheckCircle2 className="h-4 w-4" />
-              This task is complete!
+              This task is complete
             </div>
           )}
         </motion.div>

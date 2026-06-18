@@ -60,19 +60,22 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       role: "collaborator",
     })
 
-    // Send invite email
     const appUrl = process.env.NEXTAUTH_URL ?? "https://task-master-quick.vercel.app"
-    await sendCollaboratorInviteEmail({
+    const inviteUrl = `${appUrl}/invite/${inviteToken}`
+
+    // Best-effort email — don't fail the request if Resend is unavailable
+    sendCollaboratorInviteEmail({
       to: email,
       recipientName: existingUser?.name ?? undefined,
       senderName: session.user.name ?? "Someone",
       taskTitle: task.title,
       taskDescription: task.description ?? undefined,
-      inviteUrl: `${appUrl}/invite/${inviteToken}`,
+      inviteUrl,
       hasAccount: !!existingUser,
-    })
+    }).catch(() => {})
 
-    return NextResponse.json({ success: true, invited: email })
+    // Always return the invite URL so the owner can share it directly
+    return NextResponse.json({ success: true, invited: email, inviteUrl })
   } catch (e) {
     return handleApiError(e)
   }

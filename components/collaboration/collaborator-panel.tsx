@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { UserPlus, Mail, X, Clock, CheckCircle2, Loader2, Crown } from "lucide-react"
+import { UserPlus, Mail, X, Clock, CheckCircle2, Loader2, Crown, Copy, Check, Link2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Collaborator } from "@/lib/types"
 import { useSession } from "next-auth/react"
@@ -19,7 +19,8 @@ export function CollaboratorPanel({ taskId, ownerId, collaborators, onUpdate }: 
   const [email, setEmail] = useState("")
   const [sending, setSending] = useState(false)
   const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   const isOwner = session?.user?.id === ownerId
 
@@ -27,7 +28,7 @@ export function CollaboratorPanel({ taskId, ownerId, collaborators, onUpdate }: 
     if (!email.trim()) return
     setSending(true)
     setError("")
-    setSuccess("")
+    setInviteLink(null)
 
     const res = await fetch(`/api/tasks/${taskId}/invite`, {
       method: "POST",
@@ -38,12 +39,19 @@ export function CollaboratorPanel({ taskId, ownerId, collaborators, onUpdate }: 
     setSending(false)
 
     if (data.success) {
-      setSuccess(`Invite sent to ${email}`)
+      setInviteLink(data.inviteUrl)
       setEmail("")
       onUpdate()
     } else {
       setError(data.error ?? "Failed to send invite")
     }
+  }
+
+  const copyLink = async () => {
+    if (!inviteLink) return
+    await navigator.clipboard.writeText(inviteLink)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
   }
 
   const removeCollaborator = async (collaboratorId: string) => {
@@ -70,7 +78,7 @@ export function CollaboratorPanel({ taskId, ownerId, collaborators, onUpdate }: 
                 type="email"
                 placeholder="Email address…"
                 value={email}
-                onChange={e => { setEmail(e.target.value); setError(""); setSuccess("") }}
+                onChange={e => { setEmail(e.target.value); setError(""); setInviteLink(null) }}
                 onKeyDown={e => e.key === "Enter" && sendInvite()}
                 className="w-full pl-9 pr-3 py-2 text-sm border border-border rounded-lg bg-background focus:outline-none focus:ring-2 focus:ring-accent/50"
               />
@@ -90,9 +98,28 @@ export function CollaboratorPanel({ taskId, ownerId, collaborators, onUpdate }: 
               <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                 className="text-xs text-destructive">{error}</motion.p>
             )}
-            {success && (
-              <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                className="text-xs text-green-600 dark:text-green-400">{success}</motion.p>
+            {inviteLink && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                className="rounded-xl border border-accent/20 bg-accent/5 p-2.5 space-y-1.5"
+              >
+                <div className="flex items-center gap-1.5 text-[11px] text-accent font-semibold">
+                  <Link2 className="h-3 w-3" />
+                  Invite link ready — copy and share directly
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="flex-1 text-[11px] text-muted-foreground truncate font-mono">{inviteLink}</p>
+                  <button
+                    onClick={copyLink}
+                    className="flex items-center gap-1 text-[11px] font-bold text-accent hover:text-accent/80 transition-colors flex-shrink-0"
+                  >
+                    {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                    {copied ? "Copied!" : "Copy"}
+                  </button>
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
