@@ -2,11 +2,18 @@ import webpush from "web-push"
 import { db } from "@/lib/db"
 import { sql } from "drizzle-orm"
 
-webpush.setVapidDetails(
-  process.env.VAPID_SUBJECT ?? "mailto:admin@taskmaster.app",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "",
-  process.env.VAPID_PRIVATE_KEY ?? ""
-)
+// Called lazily so missing env vars during build don't crash module initialisation
+function initVapid() {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  if (!publicKey || !privateKey) return false
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT ?? "mailto:admin@taskmaster.app",
+    publicKey,
+    privateKey
+  )
+  return true
+}
 
 interface PushPayload {
   title: string
@@ -18,6 +25,8 @@ interface PushPayload {
 
 // Send a push notification to all subscriptions for a user
 export async function sendPushToUser(userId: string, payload: PushPayload) {
+  if (!initVapid()) return []
+
   const rows = await db.execute(sql`
     SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ${userId}
   `)
