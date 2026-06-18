@@ -317,6 +317,38 @@ export function useDatabaseTodos() {
     fetchTodos()
   }, [])
 
+  // Background sync — poll every 15s so collaborators see changes without refreshing.
+  // Runs silently (no loading spinner). Pauses when the tab is hidden.
+  useEffect(() => {
+    const POLL_MS = 15_000
+
+    const sync = async () => {
+      try {
+        const res = await fetch("/api/tasks")
+        if (!res.ok) return
+        const data = await res.json()
+        setTodos(data)
+      } catch {
+        // silent — don't disrupt the user if background sync fails
+      }
+    }
+
+    const interval = setInterval(() => {
+      if (!document.hidden) sync()
+    }, POLL_MS)
+
+    // Sync immediately when the user returns to the tab
+    const handleVisibility = () => {
+      if (!document.hidden) sync()
+    }
+    document.addEventListener("visibilitychange", handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener("visibilitychange", handleVisibility)
+    }
+  }, [])
+
   return {
     todos,
     isLoading,

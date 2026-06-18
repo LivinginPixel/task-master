@@ -69,6 +69,13 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     setMounted(true)
   }, [])
 
+  // Keep the open detail sheet in sync with background-polled task data
+  useEffect(() => {
+    if (!detailTask) return
+    const updated = todos.find(t => t.id === detailTask.id)
+    if (updated) setDetailTask(updated)
+  }, [todos])
+
   // Listen for service worker notification click events
   useEffect(() => {
     const handleOpenTask = (e: Event) => {
