@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import { format } from "date-fns"
 import {
   CheckCircle2, Circle, Calendar, Clock, Tag, Users,
-  CheckSquare, ExternalLink, UserPlus, Share2, ArrowRight, Loader2,
+  ExternalLink, UserPlus, Share2, ArrowRight, Loader2, CheckSquare,
 } from "lucide-react"
 import { useSession } from "next-auth/react"
 import { useRouter } from "next/navigation"
@@ -101,11 +101,11 @@ export function SharedTaskView({ token }: { token: string }) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-16">
-      {/* Header */}
-      <div className="sticky top-0 z-10 border-b border-border/40 bg-background/80 backdrop-blur-xl">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <CheckSquare className="h-5 w-5 text-accent" />
+      {/* Minimal header — no global nav on this route */}
+      <div className="sticky top-0 z-10 border-b border-border/40 bg-background/95 backdrop-blur-xl">
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <Link href="/" className="flex items-center gap-1.5 flex-shrink-0 hover:opacity-80 transition-opacity">
+            <CheckSquare className="h-4 w-4 text-accent" />
             <span className="font-bold text-sm">Task Master</span>
           </Link>
 

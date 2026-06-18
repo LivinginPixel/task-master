@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useSession, signIn } from "next-auth/react"
 import { motion } from "framer-motion"
-import { CheckCircle, XCircle, Loader2, Users } from "lucide-react"
+import { CheckCircle, XCircle, Loader2, Users, CheckSquare } from "lucide-react"
+import Link from "next/link"
 
 interface InviteData {
   invite: { id: string; invited_email: string; invite_status: string }
@@ -61,18 +62,23 @@ export default function InvitePage({ params }: { params: { token: string } }) {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Minimal nav — global header is suppressed on /invite/* */}
+      <div className="border-b border-border/40 bg-background/95 backdrop-blur-xl">
+        <div className="max-w-md mx-auto px-4 h-14 flex items-center">
+          <Link href="/" className="flex items-center gap-1.5 hover:opacity-80 transition-opacity">
+            <CheckSquare className="h-4 w-4 text-accent" />
+            <span className="font-bold text-sm">Task Master</span>
+          </Link>
+        </div>
+      </div>
+
+      <div className="flex-1 flex items-center justify-center p-4">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="w-full max-w-md"
       >
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-4">
-            <span className="text-2xl font-extrabold tracking-tight">Task Master</span>
-          </div>
-        </div>
 
         <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-lg">
 
@@ -162,6 +168,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
           )}
         </div>
       </motion.div>
+      </div>
     </div>
   )
 }
