@@ -1,14 +1,28 @@
 import { Resend } from "resend"
+import { readFileSync } from "fs"
+import { join } from "path"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = "TaskMaster <onboarding@resend.dev>"
 
-const BRAND = "#bb67e4"        // hsl(280 70% 65%) — matches --accent
-const BRAND_DARK = "#9333ea"   // darker shade for hover/border
+const BRAND = "#bb67e4"
+const BRAND_DARK = "#9333ea"
 const APP_URL = process.env.NEXTAUTH_URL ?? "https://task-master-quick.vercel.app"
-const LOGO_URL = `${APP_URL}/logo.png`
+
+// Embed logo as base64 so it renders in all email clients regardless of environment
+function getLogoDataUri(): string {
+  try {
+    const logoPath = join(process.cwd(), "public", "logo.png")
+    const data = readFileSync(logoPath).toString("base64")
+    return `data:image/png;base64,${data}`
+  } catch {
+    return ""
+  }
+}
 
 function baseTemplate(content: string) {
+  const logoSrc = getLogoDataUri()
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,10 +40,10 @@ function baseTemplate(content: string) {
           <td style="background:linear-gradient(135deg,${BRAND_DARK},${BRAND});padding:28px 32px;">
             <table cellpadding="0" cellspacing="0" width="100%">
               <tr>
-                <td>
-                  <img src="${LOGO_URL}" alt="TaskMaster logo" width="40" height="40" style="border-radius:10px;display:block;">
-                </td>
-                <td style="padding-left:12px;vertical-align:middle;">
+                ${logoSrc ? `<td style="width:44px;vertical-align:middle;">
+                  <img src="${logoSrc}" alt="TaskMaster" width="40" height="40" style="border-radius:10px;display:block;">
+                </td>` : ""}
+                <td style="padding-left:${logoSrc ? "12" : "0"}px;vertical-align:middle;">
                   <span style="font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">Task<span style="font-weight:400;opacity:0.8;">Master</span></span>
                 </td>
               </tr>
