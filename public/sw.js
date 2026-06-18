@@ -1,14 +1,15 @@
-// TaskMaster Service Worker — v3
-const CACHE_NAME = 'task-master-v3';
+// TaskMaster Service Worker — v4
+const CACHE_NAME = 'task-master-v4';
 
 self.addEventListener('install', (event) => {
-  self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(['/', '/dashboard']).catch(() => {})));
+  // Skip waiting immediately so the new SW takes over without delay
+  event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {
+  // Delete old caches, claim clients, sync scheduled notifications
   event.waitUntil(Promise.all([
-    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))),
+    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))),
     self.clients.claim(),
     syncStoredNotifications(),
   ]));
