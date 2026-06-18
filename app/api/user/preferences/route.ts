@@ -7,9 +7,9 @@ import { z } from "zod";
 import { handleApiError } from "@/lib/errors";
 
 const preferencesSchema = z.object({
-  notificationsEnabled: z.boolean(),
-  defaultView: z.enum(["list", "grid"]),
-  theme: z.enum(["light", "dark", "system"]),
+  notificationsEnabled: z.boolean().optional(),
+  defaultView: z.enum(["list", "kanban", "calendar"]).optional(),
+  theme: z.enum(["light", "dark", "system"]).optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -19,15 +19,29 @@ export async function PATCH(req: Request) {
     const body = await req.json();
     const validatedData = preferencesSchema.parse(body);
 
-    // Update user preferences
-    await db
-      .update(users)
-      .set({
-        notifications_enabled: validatedData.notificationsEnabled,
-        default_view: validatedData.defaultView,
-        theme: validatedData.theme,
-      })
-      .where(eq(users.id, session.user.id));
+    // Build typed partial update object matching the DB schema
+    const updates: Partial<{
+      notifications_enabled: boolean
+      default_view: string
+      theme: string
+    }> = {}
+
+    if (validatedData.notificationsEnabled !== undefined) {
+      updates.notifications_enabled = validatedData.notificationsEnabled
+    }
+    if (validatedData.defaultView !== undefined) {
+      updates.default_view = validatedData.defaultView
+    }
+    if (validatedData.theme !== undefined) {
+      updates.theme = validatedData.theme
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await db
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, session.user.id));
+    }
 
     return NextResponse.json(
       { message: "Preferences updated successfully" },
@@ -36,4 +50,4 @@ export async function PATCH(req: Request) {
   } catch (error) {
     return handleApiError(error);
   }
-} 
+}

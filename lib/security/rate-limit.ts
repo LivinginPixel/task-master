@@ -153,14 +153,25 @@ function createBlockingLimiter(
 
   return {
     limit: async (identifier: string) => {
-      const hashedId = hashIdentifier(identifier);
-      const result = await ratelimit.limit(hashedId);
-      return {
-        success: result.success,
-        remaining: result.remaining,
-        limit: result.limit,
-        reset: result.reset,
-      };
+      try {
+        const hashedId = hashIdentifier(identifier);
+        const result = await ratelimit.limit(hashedId);
+        return {
+          success: result.success,
+          remaining: result.remaining,
+          limit: result.limit,
+          reset: result.reset,
+        };
+      } catch (error) {
+        // Redis fetch failed (network unreachable, timeout, etc.)
+        const isProduction = process.env.NODE_ENV === "production";
+        if (isProduction) {
+          console.error("❌ Rate limiter fetch failed in production:", error);
+          return { success: false, remaining: 0, limit: 0, reset: Date.now() + 60000 };
+        }
+        console.warn("⚠️  Rate limiter unavailable (Redis unreachable). Failing open in development.");
+        return { success: true, remaining: 999, limit: 999, reset: Date.now() + 600000 };
+      }
     },
   };
 }

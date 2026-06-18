@@ -2,64 +2,98 @@
 
 import Link from "next/link"
 import { useSession } from "next-auth/react"
+import { usePathname } from "next/navigation"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Settings, Plus } from "lucide-react"
+import { Settings, Focus, BarChart3, type LucideIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { motion } from "framer-motion"
 
-interface DashboardHeaderProps {
-  onQuickAdd?: () => void
-}
+const NAV_LINKS: { href: string; label: string; exact?: boolean; icon?: LucideIcon }[] = [
+  { href: "/dashboard", label: "Tasks", exact: true },
+  { href: "/dashboard/focus", label: "Focus", icon: Focus },
+  { href: "/dashboard/stats", label: "Stats", icon: BarChart3 },
+]
 
-export function DashboardHeader({ onQuickAdd }: DashboardHeaderProps) {
+export function DashboardHeader() {
   const { data: session } = useSession()
+  const pathname = usePathname()
   const userInitials = session?.user?.name?.charAt(0).toUpperCase() || "U"
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
-      <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
-          {/* App Name */}
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-emerald-600 to-emerald-500 bg-clip-text text-transparent">
-              TaskMaster
-            </h1>
+    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
+      <div className="container mx-auto px-4">
+        <div className="flex items-center justify-between h-14">
+          {/* Logo */}
+          <Link href="/dashboard" className="flex items-center gap-2.5 shrink-0">
+            <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-accent to-accent/60 flex items-center justify-center shadow-sm">
+              <span className="text-accent-foreground text-xs font-black">TM</span>
+            </div>
+            <span className="text-sm font-bold tracking-tight hidden sm:block">TaskMaster</span>
           </Link>
 
-          {/* Right Side Actions */}
-          <div className="flex items-center gap-2">
-            {/* Quick Add Button (Desktop) */}
-            {onQuickAdd && (
-              <Button
-                onClick={onQuickAdd}
-                size="sm"
-                className="hidden sm:flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                <Plus className="h-4 w-4" />
-                <span className="text-sm font-medium">Add Task</span>
-              </Button>
-            )}
+          {/* Center nav */}
+          <nav className="flex items-center gap-0.5">
+            {NAV_LINKS.map(({ href, label, icon: Icon, exact }) => {
+              const isActive = exact ? pathname === href : pathname.startsWith(href)
+              const isFocus = href === "/dashboard/focus"
 
-            {/* Settings */}
+              if (isFocus) {
+                return (
+                  <Link key={href} href={href}>
+                    <div className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide transition-all",
+                      isActive
+                        ? "bg-accent text-accent-foreground shadow-md shadow-accent/30"
+                        : "bg-accent/15 text-accent hover:bg-accent hover:text-accent-foreground"
+                    )}>
+                      {Icon && <Icon className="h-3.5 w-3.5" />}
+                      {label}
+                    </div>
+                  </Link>
+                )
+              }
+
+              return (
+                <Link key={href} href={href}>
+                  <div className="relative px-3 py-1.5">
+                    <span className={cn(
+                      "flex items-center gap-1.5 text-sm font-medium transition-colors",
+                      isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    )}>
+                      {Icon && <Icon className="h-3.5 w-3.5" />}
+                      {label}
+                    </span>
+                    {isActive && (
+                      <motion.div
+                        layoutId="nav-indicator"
+                        className="absolute bottom-0 left-3 right-3 h-0.5 rounded-full bg-accent"
+                        transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                      />
+                    )}
+                  </div>
+                </Link>
+              )
+            })}
+          </nav>
+
+          {/* Right side */}
+          <div className="flex items-center gap-1 shrink-0">
             <Link href="/settings">
-              <Button variant="ghost" size="icon" className="h-9 w-9">
+              <Button variant="ghost" size="icon" className="h-8 w-8">
                 <Settings className="h-4 w-4" />
                 <span className="sr-only">Settings</span>
               </Button>
             </Link>
-
-            {/* Profile Avatar */}
             <Link href="/profile">
-              <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
-                <Avatar className="h-9 w-9 ring-2 ring-emerald-500/20">
-                  <AvatarImage 
-                    src={session?.user?.image || undefined} 
-                    alt={session?.user?.name || "User"} 
-                  />
-                  <AvatarFallback className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold">
+              <button className="h-8 w-8 rounded-full overflow-hidden ring-2 ring-border hover:ring-accent/50 transition-all">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={session?.user?.image || undefined} alt={session?.user?.name || "User"} />
+                  <AvatarFallback className="bg-accent/10 text-accent text-xs font-bold">
                     {userInitials}
                   </AvatarFallback>
                 </Avatar>
-              </Button>
+              </button>
             </Link>
           </div>
         </div>

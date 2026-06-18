@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DateTimeRangePicker } from "@/components/ui/date-time-range-picker"
 import { Switch } from "@/components/ui/switch"
-import { X, Plus, Bell } from "lucide-react"
+import { X, Plus, Bell, RefreshCw } from "lucide-react"
 import { v4 as uuidv4 } from "uuid"
 import type { Task, Subtask } from "@/lib/types"
 
@@ -43,6 +43,9 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
   const [subtasks, setSubtasks] = useState<Subtask[]>([])
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("")
   const [notifyOnStart, setNotifyOnStart] = useState(true)
+  const [recurrenceType, setRecurrenceType] = useState<Task["recurrenceType"]>(null)
+  const [recurrenceInterval, setRecurrenceInterval] = useState(1)
+  const [timeError, setTimeError] = useState<string | null>(null)
 
   // Initialize form with initial data when modal opens or initialData changes
   useEffect(() => {
@@ -67,6 +70,8 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
       setEndDate(undefined)
       setEndTime("")
       setNotifyOnStart(true)
+      setRecurrenceType(null)
+      setRecurrenceInterval(1)
       setSubtasks([])
       setNewSubtaskTitle("")
     }
@@ -91,19 +96,18 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
 
   const handleSubmit = () => {
     if (!title.trim()) return
-    if (!startDate || !startTime) {
-      // Show error - start time is required
-      return
-    }
-    if (!endDate || !endTime) {
-      // Show error - end time is required
-      return
-    }
+    if (!startDate || !startTime) return
+    if (!endDate || !endTime) return
 
-    // Calculate start and end times
+    // Reject past start times
     const startDateTime = new Date(startDate)
     const [sh, sm] = startTime.split(":").map(Number)
     startDateTime.setHours(sh, sm, 0, 0)
+    if (startDateTime < new Date()) {
+      setTimeError("Start time cannot be in the past.")
+      return
+    }
+    setTimeError(null)
     
     const endDateTime = new Date(endDate)
     const [eh, em] = endTime.split(":").map(Number)
@@ -122,6 +126,8 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
       startTime: startDateTime.toISOString(),
       endTime: endDateTime.toISOString(),
       notifyOnStart: notifyOnStart,
+      recurrenceType: recurrenceType ?? null,
+      recurrenceInterval: recurrenceInterval,
       subtasks: subtasks.length > 0 ? subtasks.map(st => ({ ...st, task_id: "" })) : undefined,
       category: "",
       tags: [],
@@ -142,6 +148,8 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
     setEndDate(undefined)
     setEndTime("")
     setNotifyOnStart(true)
+    setRecurrenceType(null)
+    setRecurrenceInterval(1)
     setSubtasks([])
     setNewSubtaskTitle("")
     onOpenChange(false)
@@ -221,15 +229,18 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
               startTime={startTime}
               endDate={endDate}
               endTime={endTime}
-              onStartDateChange={setStartDate}
-              onStartTimeChange={setStartTime}
+              onStartDateChange={(d) => { setStartDate(d); setTimeError(null) }}
+              onStartTimeChange={(t) => { setStartTime(t); setTimeError(null) }}
               onEndDateChange={setEndDate}
               onEndTimeChange={setEndTime}
               placeholder="Select start and end time"
             />
             {(!startDate || !startTime || !endDate || !endTime) && (
-              <p className="text-xs text-red-500 mt-1">
-                Start and end time are required
+              <p className="text-xs text-red-500 mt-1">Start and end time are required</p>
+            )}
+            {timeError && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <span>⚠</span> {timeError}
               </p>
             )}
           </div>
@@ -253,6 +264,57 @@ export function AddTaskModal({ open, onOpenChange, onAdd, initialData }: AddTask
               onCheckedChange={setNotifyOnStart}
               className="flex-shrink-0"
             />
+          </div>
+
+          {/* Recurrence */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <RefreshCw className="h-4 w-4 text-muted-foreground" />
+              <Label className="text-sm font-semibold">Repeat</Label>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {([
+                { value: null, label: "None" },
+                { value: "daily", label: "Daily" },
+                { value: "weekday", label: "Weekdays" },
+                { value: "weekly", label: "Weekly" },
+                { value: "monthly", label: "Monthly" },
+              ] as const).map(opt => (
+                <button
+                  key={opt.label}
+                  type="button"
+                  onClick={() => setRecurrenceType(opt.value)}
+                  className={`py-2 px-3 rounded-lg border text-xs font-medium transition-all ${
+                    recurrenceType === opt.value
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border/60 text-muted-foreground hover:border-accent/40"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {recurrenceType && recurrenceType !== "weekday" && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs text-muted-foreground shrink-0">Every</Label>
+                <Select
+                  value={String(recurrenceInterval)}
+                  onValueChange={(v) => setRecurrenceInterval(Number(v))}
+                >
+                  <SelectTrigger className="h-8 w-20">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1,2,3,4,6].map(n => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-xs text-muted-foreground">
+                  {recurrenceType === "daily" ? "day(s)" : recurrenceType === "weekly" ? "week(s)" : "month(s)"}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Subtasks */}

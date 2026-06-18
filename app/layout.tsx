@@ -2,7 +2,7 @@ import AuthSessionProvider from "@/components/session-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import './globals.css';
 import Link from "next/link";
-import { CheckSquare } from "lucide-react";
+import { CheckSquare, Focus } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { UserNav } from "@/components/user-nav";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -47,6 +47,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <span className="font-semibold text-foreground">Task Master</span>
                 </Link>
                 <nav className="flex items-center gap-2 sm:gap-3 flex-shrink-0" aria-label="User menu">
+                  <Link
+                    href="/dashboard/focus"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-accent text-accent-foreground hover:opacity-90 transition-opacity"
+                  >
+                    <Focus className="h-3.5 w-3.5" />
+                    Focus
+                  </Link>
                   <NotificationBell />
                   <ThemeSwitcher />
                   <UserNav />

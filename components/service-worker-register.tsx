@@ -1,17 +1,78 @@
 "use client"
 
 import { useEffect } from "react"
-import { ServiceWorkerRegistration } from "@/lib/services/service-worker-registration"
+import { useRouter } from "next/navigation"
+
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+  const raw = window.atob(base64)
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+}
+
+async function subscribeToPush(registration: ServiceWorkerRegistration) {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
+  if (!publicKey) return
+
+  try {
+    const existing = await registration.pushManager.getSubscription()
+    const sub = existing ?? await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    })
+
+    // If user is not signed in, the endpoint returns 401 — that's fine, we just retry next visit
+    await fetch("/api/notifications/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sub.toJSON()),
+    })
+  } catch {
+    // Push not supported or permission denied — graceful no-op
+  }
+}
 
 export function ServiceWorkerRegister() {
-  useEffect(() => {
-    // Register service worker on mount
-    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      ServiceWorkerRegistration.getInstance().catch((error) => {
-        console.error('Failed to register service worker:', error)
-      })
-    }
-  }, [])
+  const router = useRouter()
 
-  return null // This component doesn't render anything
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return
+
+    navigator.serviceWorker
+      .register("/sw.js", { scope: "/" })
+      .then(async (reg) => {
+        await subscribeToPush(reg)
+
+        navigator.serviceWorker.addEventListener("message", (event) => {
+          const { type, taskId, navigateTo } = event.data || {}
+
+          if (type === "NOTIFICATION_CLICK") {
+            if (navigateTo) {
+              router.push(navigateTo)
+              setTimeout(() => {
+                if (taskId) {
+                  window.dispatchEvent(new CustomEvent("tm:open-task", { detail: { taskId } }))
+                }
+                window.dispatchEvent(new CustomEvent("tm:refresh-tasks"))
+              }, 300)
+            }
+          }
+
+          if (type === "NOTIFICATION_FIRED") {
+            window.dispatchEvent(new CustomEvent("tm:refresh-tasks"))
+          }
+        })
+
+        // Page opened via notification click — ?task= param
+        const taskIdFromUrl = new URLSearchParams(window.location.search).get("task")
+        if (taskIdFromUrl) {
+          setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("tm:open-task", { detail: { taskId: taskIdFromUrl } }))
+          }, 800)
+        }
+      })
+      .catch(() => {})
+  }, [router])
+
+  return null
 }

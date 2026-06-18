@@ -101,19 +101,19 @@ export function NotificationsForm({ initialNotificationsEnabled }: Notifications
           </div>
           <ul className="text-sm text-muted-foreground space-y-2 list-none">
             <li className="flex items-start gap-2">
-              <span className="text-primary mt-0.5">•</span>
+              <span className="text-accent mt-0.5">•</span>
               <span>Task due date reminders</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-primary mt-0.5">•</span>
+              <span className="text-accent mt-0.5">•</span>
               <span>Overdue task alerts</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-primary mt-0.5">•</span>
+              <span className="text-accent mt-0.5">•</span>
               <span>Task completion confirmations</span>
             </li>
             <li className="flex items-start gap-2">
-              <span className="text-primary mt-0.5">•</span>
+              <span className="text-accent mt-0.5">•</span>
               <span>Account security updates</span>
             </li>
           </ul>

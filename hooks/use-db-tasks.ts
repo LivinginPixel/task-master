@@ -97,6 +97,15 @@ export function useDatabaseTodos() {
 
   // Update an existing task in the database
   const updateTodo = async (id: string, updates: Partial<Task>, successMessage?: string) => {
+    // Optimistic update — reflect change immediately in the UI
+    let previousTask: Task | undefined
+    setTodos((prevTodos) => {
+      previousTask = prevTodos.find(t => t.id === id)
+      return prevTodos.map((todo) =>
+        todo.id === id ? { ...todo, ...updates } : todo
+      )
+    })
+
     try {
       const response = await fetch(`/api/tasks/${id}`, {
         method: "PATCH",
@@ -111,7 +120,7 @@ export function useDatabaseTodos() {
 
       const updatedTodo = await response.json();
 
-      // Use the updated task from the server!
+      // Replace optimistic state with authoritative server response
       setTodos((prevTodos) =>
         prevTodos.map((todo) => (todo.id === id ? updatedTodo : todo))
       );
@@ -157,6 +166,12 @@ export function useDatabaseTodos() {
         description: message,
       });
     } catch (err) {
+      // Revert optimistic update on failure
+      if (previousTask) {
+        setTodos((prevTodos) =>
+          prevTodos.map((todo) => (todo.id === id ? previousTask! : todo))
+        )
+      }
       toast({
         title: "Error",
         description: err instanceof Error ? err.message : "Failed to update task",
@@ -313,5 +328,6 @@ export function useDatabaseTodos() {
     reorderTodos,
     sortTodos,
     stats,
+    refetch: fetchTodos,
   }
 }

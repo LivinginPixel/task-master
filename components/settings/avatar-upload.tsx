@@ -166,7 +166,7 @@ export function AvatarUpload({
           disabled={disabled || isUploading}
           className={cn(
             "relative rounded-full transition-all",
-            "hover:ring-2 hover:ring-primary hover:ring-offset-2 hover:ring-offset-background",
+            "hover:ring-2 hover:ring-accent hover:ring-offset-2 hover:ring-offset-background",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
             disabled && "opacity-50 cursor-not-allowed",
             !disabled && "cursor-pointer"

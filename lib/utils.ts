@@ -23,6 +23,12 @@ export function mapTaskToCamelCase(task: any) {
     snoozedUntil: task.snoozed_until,
     partiallyResolved: task.partially_resolved ?? false,
     duplicatedFromTaskId: task.duplicated_from_task_id,
+    recurrenceType: task.recurrence_type ?? null,
+    recurrenceInterval: task.recurrence_interval ?? 1,
+    parentTaskId: task.parent_task_id ?? null,
+    shareToken: task.share_token ?? null,
+    deferCount: task.defer_count ?? 0,
+    procrastinationReason: task.procrastination_reason ?? null,
   }
 }
 

@@ -16,7 +16,7 @@ interface SettingsClientProps {
   user: User;
   preferences: {
     notificationsEnabled: boolean;
-    defaultView: "list" | "grid";
+    defaultView: "list" | "kanban" | "grid";
     theme: "light" | "dark" | "system";
   };
 }
@@ -169,8 +169,8 @@ export function SettingsClient({ user, preferences }: SettingsClientProps) {
         <main className="flex-1 min-w-0">
           <div className="space-y-1 mb-6 pb-4 border-b">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                <ActiveIcon className="h-5 w-5 text-primary" />
+              <div className="h-10 w-10 rounded-lg bg-accent/10 flex items-center justify-center shrink-0">
+                <ActiveIcon className="h-5 w-5 text-accent" />
               </div>
               <div className="flex-1">
                 <h2 className="text-xl font-semibold">

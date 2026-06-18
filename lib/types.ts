@@ -22,6 +22,13 @@ export interface Task {
   partiallyResolved?: boolean;
   duplicatedFromTaskId?: string;
   notes: string;
+  recurrenceType?: "daily" | "weekday" | "weekly" | "monthly" | null;
+  recurrenceInterval?: number;
+  parentTaskId?: string | null;
+  shareToken?: string | null;
+  deferCount?: number;
+  procrastinationReason?: string | null;
+  collaboratorCount?: number;
   subtasks?: {
     id: string;
     title: string;

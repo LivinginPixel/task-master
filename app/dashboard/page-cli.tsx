@@ -7,9 +7,10 @@ import { AlertCircle } from "lucide-react";
 interface DashboardClientProps {
   userName: string;
   dbConnected: boolean;
+  defaultView?: "list" | "kanban";
 }
 
-export function DashboardClient({ userName, dbConnected }: DashboardClientProps) {
+export function DashboardClient({ userName, dbConnected, defaultView }: DashboardClientProps) {
   return (
     <>
       {!dbConnected && (
@@ -23,7 +24,7 @@ export function DashboardClient({ userName, dbConnected }: DashboardClientProps)
           </Alert>
         </div>
       )}
-      <ComprehensiveDashboard userName={userName} dbConnected={dbConnected} />
+      <ComprehensiveDashboard userName={userName} dbConnected={dbConnected} defaultView={defaultView} />
     </>
   );
 }

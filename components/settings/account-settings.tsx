@@ -169,7 +169,7 @@ export function AccountSettings({ user }: AccountSettingsProps) {
               <AlertDialogAction
                 onClick={handleSignOut}
                 disabled={isLoading}
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
               >
                 {isLoading ? (
                   <>

@@ -64,6 +64,12 @@ export const tasks = pgTable('tasks', {
   tags: text("tags").array(),
   position: text("position"),
   attachments: text("attachments").array(),
+  recurrence_type: text("recurrence_type"),
+  recurrence_interval: integer("recurrence_interval").default(1),
+  parent_task_id: uuid("parent_task_id"),
+  share_token: text("share_token").unique(),
+  defer_count: integer("defer_count").default(0).notNull(),
+  procrastination_reason: text("procrastination_reason"),
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -94,6 +100,13 @@ export const subtasksRelations = relations(subtasks, ({ one }) => ({
     references: [tasks.id],
   }),
 }));
+
+export const taskCollaborators = pgTable("task_collaborators", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  task_id: uuid("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  user_id: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  accepted_at: timestamp("accepted_at").defaultNow(),
+});
 
 // Auth tables - using snake_case column names to match DrizzleAdapter expectations
 export const accounts = pgTable("accounts", {

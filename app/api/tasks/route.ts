@@ -23,6 +23,9 @@ const taskSchema = z.object({
   attachments: z.array(z.string()).optional(),
   locked_after_due: z.boolean().optional().default(true),
   duplicated_from_task_id: z.string().uuid().optional(),
+  recurrence_type: z.enum(["daily", "weekday", "weekly", "monthly"]).nullable().optional(),
+  recurrence_interval: z.number().int().min(1).optional().default(1),
+  parent_task_id: z.string().uuid().nullable().optional(),
   subtasks: z.array(z.object({
     title: z.string(),
     completed: z.boolean().optional().default(false)
@@ -68,6 +71,9 @@ export async function POST(req: Request) {
       end_time: json.end_time || json.endTime,
       notify_on_start: json.notify_on_start !== undefined ? json.notify_on_start : (json.notifyOnStart !== undefined ? json.notifyOnStart : true),
       duplicated_from_task_id: json.duplicated_from_task_id || json.duplicatedFromTaskId,
+      recurrence_type: json.recurrence_type ?? json.recurrenceType ?? null,
+      recurrence_interval: json.recurrence_interval ?? json.recurrenceInterval ?? 1,
+      parent_task_id: json.parent_task_id ?? json.parentTaskId ?? null,
     });
 
     // Get the current highest position for ordering
@@ -133,6 +139,9 @@ export async function POST(req: Request) {
       overdue_at: overdueAt,
       locked_after_due: body.locked_after_due ?? true,
       duplicated_from_task_id: body.duplicated_from_task_id || null,
+      recurrence_type: body.recurrence_type ?? null,
+      recurrence_interval: body.recurrence_interval ?? 1,
+      parent_task_id: body.parent_task_id ?? null,
     }).returning();
     
     // Type guard: ensure insertedTasks is an array

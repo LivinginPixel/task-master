@@ -8,6 +8,45 @@ import { mapTaskToCamelCase, isTaskOverdue } from "@/lib/utils";
 import { handleApiError } from "@/lib/errors";
 import { isTaskLocked } from "@/lib/task-utils";
 
+/**
+ * Advance a date by the recurrence interval, preserving the time-of-day.
+ * For "weekday": skip weekends until the next weekday.
+ */
+function advanceDate(base: Date, recurrenceType: string, interval: number): Date {
+  const next = new Date(base)
+  switch (recurrenceType) {
+    case "daily":
+      next.setDate(next.getDate() + interval)
+      break
+    case "weekday":
+      // Always advance at least 1 day then skip past any weekend days
+      next.setDate(next.getDate() + 1)
+      while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1)
+      break
+    case "weekly":
+      next.setDate(next.getDate() + 7 * interval)
+      break
+    case "monthly":
+      next.setMonth(next.getMonth() + interval)
+      break
+  }
+  return next
+}
+
+/**
+ * Given the current occurrence's due date, compute the next due date.
+ * Falls back to "today → advance" if no due date is set.
+ */
+function computeNextDueDate(
+  currentDue: Date | null,
+  recurrenceType: string,
+  interval: number
+): Date | null {
+  if (!recurrenceType) return null
+  const base = currentDue ? new Date(currentDue) : new Date()
+  return advanceDate(base, recurrenceType, interval)
+}
+
 const updateTaskSchema = z.object({
   title: z.string(),
   description: z.string(),
@@ -34,7 +73,13 @@ const updateTaskSchema = z.object({
     completed: z.boolean(),
     task_id: z.string().optional() // Made task_id optional since we'll set it server-side
   })),
-  dueDate: z.string().optional()
+  dueDate: z.string().optional(),
+  recurrenceType: z.enum(["daily", "weekday", "weekly", "monthly"]).nullable().optional(),
+  recurrenceInterval: z.number().int().min(1).optional(),
+  parentTaskId: z.string().nullable().optional(),
+  deferCount: z.number().int().min(0).optional(),
+  procrastinationReason: z.string().nullable().optional(),
+  completedAt: z.string().optional(),
 }).partial();
 
 // PATCH /api/tasks/[id] - Update a task
@@ -196,6 +241,21 @@ export async function PATCH(
     if (validatedData.partially_resolved !== undefined) {
       updateData.partially_resolved = validatedData.partially_resolved;
     }
+    if (validatedData.recurrenceType !== undefined) {
+      updateData.recurrence_type = validatedData.recurrenceType;
+    }
+    if (validatedData.recurrenceInterval !== undefined) {
+      updateData.recurrence_interval = validatedData.recurrenceInterval;
+    }
+    if (validatedData.parentTaskId !== undefined) {
+      updateData.parent_task_id = validatedData.parentTaskId;
+    }
+    if (validatedData.deferCount !== undefined) {
+      updateData.defer_count = validatedData.deferCount;
+    }
+    if (validatedData.procrastinationReason !== undefined) {
+      updateData.procrastination_reason = validatedData.procrastinationReason;
+    }
 
     // Handle status transitions according to specification
     if (validatedData.status !== undefined) {
@@ -278,21 +338,9 @@ export async function PATCH(
     }
 
     // Handle subtasks update if present
+    // Subtasks can always be edited on overdue tasks (matching ClickUp/Todoist behaviour).
+    // Only COMPLETED tasks lock their subtasks (enforced on the client side).
     if (validatedData.subtasks !== undefined) {
-      // Check if parent task is locked (only if not completing)
-      if (isTaskLocked({
-        status: currentTask.status,
-        locked_after_due: currentTask.locked_after_due ?? true
-      }) && !isCompleting) {
-        return NextResponse.json(
-          { 
-            error: "Cannot update subtasks of an overdue locked task.",
-            code: "SUBTASK_LOCKED"
-          },
-          { status: 403 }
-        );
-      }
-
       // Remove old subtasks for this task
       await db.delete(subtasks).where(eq(subtasks.task_id, params.id));
       // Insert new subtasks
@@ -308,6 +356,40 @@ export async function PATCH(
       where: eq(tasks.id, params.id),
       with: { subtasks: true }
     });
+
+    // Auto-create next recurrence when completing a recurring task
+    if (isCompleting && currentTask.recurrence_type) {
+      const rt = currentTask.recurrence_type
+      const ri = currentTask.recurrence_interval ?? 1
+
+      const nextDue = computeNextDueDate(currentTask.due_date, rt, ri)
+
+      // Advance start_time and end_time by the same calendar distance
+      const nextStart = currentTask.start_time ? advanceDate(currentTask.start_time, rt, ri) : null
+      const nextEnd = currentTask.end_time ? advanceDate(currentTask.end_time, rt, ri) : null
+
+      if (nextDue) {
+        await db.insert(tasks).values({
+          user_id: userId,
+          title: currentTask.title,
+          description: currentTask.description,
+          notes: currentTask.notes,
+          category: currentTask.category,
+          priority: currentTask.priority,
+          status: "PENDING",
+          tags: currentTask.tags,
+          due_date: nextDue,
+          due_time: currentTask.due_time,
+          start_time: nextStart,
+          end_time: nextEnd,
+          locked_after_due: currentTask.locked_after_due,
+          notify_on_start: currentTask.notify_on_start,
+          recurrence_type: rt,
+          recurrence_interval: ri,
+          parent_task_id: currentTask.id,
+        })
+      }
+    }
 
     return NextResponse.json(mapTaskToCamelCase(updatedTask));
   } catch (error) {

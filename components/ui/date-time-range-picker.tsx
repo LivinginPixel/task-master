@@ -108,14 +108,24 @@ export function DateTimeRangePicker({
     const start = option.getStartDate()
     const end = option.getEndDate()
     
-    // Set default times (9 AM - 5 PM)
-    start.setHours(9, 0, 0, 0)
-    end.setHours(17, 0, 0, 0)
-    
+    // Default start = current time (rounded up to next 15 min), end = +1 hour
+    const now = new Date()
+    const minutes = Math.ceil(now.getMinutes() / 15) * 15
+    now.setMinutes(minutes, 0, 0)
+    if (minutes === 60) { now.setHours(now.getHours() + 1, 0, 0, 0) }
+    const endDefault = new Date(now.getTime() + 60 * 60 * 1000)
+
+    start.setHours(now.getHours(), now.getMinutes(), 0, 0)
+    end.setHours(endDefault.getHours(), endDefault.getMinutes(), 0, 0)
+
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const startStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`
+    const endStr = `${pad(endDefault.getHours())}:${pad(endDefault.getMinutes())}`
+
     onStartDateChange(start)
-    onStartTimeChange("09:00")
+    onStartTimeChange(startStr)
     onEndDateChange(end)
-    onEndTimeChange("17:00")
+    onEndTimeChange(endStr)
     
     // Go to time adjustment mode
     setMode("start-time")

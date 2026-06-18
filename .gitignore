@@ -6,3 +6,7 @@ node_modules
 
 # Uploads
 public/uploads
+.claude
+.agents
+skills-lock.json
+.mcp.json

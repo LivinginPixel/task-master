@@ -17,7 +17,7 @@ export default async function SettingsPage() {
     const preferences = user
       ? {
           notificationsEnabled: user.notifications_enabled ?? true,
-          defaultView: (user.default_view as "list" | "grid") ?? "list",
+          defaultView: (user.default_view as "list" | "kanban" | "grid") ?? "list",
           theme: (user.theme as "light" | "dark" | "system") ?? "system",
         }
       : {
