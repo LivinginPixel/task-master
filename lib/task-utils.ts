@@ -44,13 +44,34 @@ export async function updateOverdueTasks(dbInstance: DB = db) {
   const now = new Date()
   const nowISO = now.toISOString()
 
+  // Use end_time for timezone-safe overdue detection.
+  // For older tasks without end_time, fall back to due_date + due_time (UTC comparison).
   const pastDueCondition = sql`(
     CASE
-      WHEN ${tasks.due_time} IS NULL
-      THEN ${tasks.due_date} < ${sql.raw(`'${nowISO}'`)}::timestamp
+      WHEN ${tasks.end_time} IS NOT NULL THEN ${tasks.end_time} < ${sql.raw(`'${nowISO}'`)}::timestamp
+      WHEN ${tasks.due_time} IS NULL     THEN ${tasks.due_date} < ${sql.raw(`'${nowISO}'`)}::timestamp
       ELSE (${tasks.due_date}::date + ${tasks.due_time}::time) < ${sql.raw(`'${nowISO}'`)}::timestamp
     END
   )`
+
+  // ── 0. Auto-archive stale tasks ───────────────────────────────────────────
+  // Archive OVERDUE tasks neglected for more than 30 days, and any task
+  // (of any status) that is older than 90 days.
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString()
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString()
+
+  await dbInstance
+    .update(tasks)
+    .set({ archived: true, archived_at: now, updated_at: now })
+    .where(
+      and(
+        eq(tasks.archived, false),
+        sql`(
+          (${tasks.status} = 'OVERDUE' AND ${tasks.overdue_at} < ${sql.raw(`'${thirtyDaysAgo}'`)}::timestamp)
+          OR ${tasks.created_at} < ${sql.raw(`'${ninetyDaysAgo}'`)}::timestamp
+        )`
+      )
+    )
 
   // ── 1. Handle recurring tasks: auto-complete + spawn next ─────────────────
   const pastDueRecurring = await dbInstance

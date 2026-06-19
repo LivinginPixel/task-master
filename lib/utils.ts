@@ -36,20 +36,28 @@ export function mapTaskToCamelCase(task: any) {
     completedByName: task.completed_by_name ?? null,
     completedByImage: task.completed_by_image ?? null,
     collaborators: task.collaborators ?? [],
+    archived: task.archived ?? false,
+    archivedAt: task.archived_at ?? null,
   }
 }
 
 /**
- * Check if a task is overdue based on due_date and due_time
+ * Check if a task is overdue.
+ * Prefers end_time (UTC timestamp) for correctness across all timezones.
+ * Falls back to due_date + due_time if end_time is absent.
  */
-export function isTaskOverdue(task: { 
-  due_date: Date | null; 
-  due_time: string | null; 
+export function isTaskOverdue(task: {
+  end_time?: Date | null;
+  due_date: Date | null;
+  due_time: string | null;
   status?: string;
 }): boolean {
-  if (!task.due_date || task.status === "COMPLETED") {
-    return false;
-  }
+  if (task.status === "COMPLETED") return false;
+
+  // Use end_time when available — it's a true UTC timestamp, timezone-safe
+  if (task.end_time) return task.end_time < new Date();
+
+  if (!task.due_date) return false;
 
   const dueDate = new Date(task.due_date);
   if (task.due_time) {

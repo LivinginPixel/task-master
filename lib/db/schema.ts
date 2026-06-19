@@ -71,6 +71,8 @@ export const tasks = pgTable('tasks', {
   share_token: text("share_token").unique(),
   defer_count: integer("defer_count").default(0).notNull(),
   procrastination_reason: text("procrastination_reason"),
+  archived: boolean("archived").default(false).notNull(),
+  archived_at: timestamp("archived_at"),
   created_at: timestamp("created_at").defaultNow().notNull(),
   updated_at: timestamp("updated_at").defaultNow().notNull(),
 });

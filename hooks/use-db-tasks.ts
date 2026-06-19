@@ -11,35 +11,42 @@ export function useDatabaseTodos() {
   const [error, setError] = useState<Error | null>(null)
   const { toast } = useToast()
 
-  // Calculate statistics
+  // Active (non-archived) tasks — the main working set
+  const activeTodos = useMemo(() => todos.filter(t => !t.archived), [todos])
+
+  // Calculate statistics (only over non-archived tasks)
   const stats = useMemo(() => {
-    const total = todos.length
-    const completed = todos.filter((todo) => todo.status === "COMPLETED").length
+    const now = new Date()
+    const total = activeTodos.length
+    const completed = activeTodos.filter((todo) => todo.status === "COMPLETED").length
     const pending = total - completed
-    const overdue = todos.filter((todo) => {
-      if (!todo.dueDate || todo.status === "COMPLETED") return false
-      const dueDate = new Date(todo.dueDate)
+    const overdue = activeTodos.filter((todo) => {
+      if (todo.status === "COMPLETED") return false
+      // Prefer endTime (UTC) for timezone-safe check
+      if (todo.endTime) return new Date(todo.endTime) < now
+      if (!todo.dueDate) return false
+      const d = new Date(todo.dueDate)
       if (todo.dueTime) {
-        const [hours, minutes] = todo.dueTime.split(":").map(Number)
-        dueDate.setHours(hours, minutes, 0, 0)
+        const [h, m] = todo.dueTime.split(":").map(Number)
+        d.setHours(h, m, 0, 0)
       } else {
-        dueDate.setHours(23, 59, 59, 999)
+        d.setHours(23, 59, 59, 999)
       }
-      return dueDate < new Date()
+      return d < now
     }).length
-    const dueToday = todos.filter((todo) => {
+    const dueToday = activeTodos.filter((todo) => {
       if (!todo.dueDate || todo.status === "COMPLETED") return false
-      const dueDate = new Date(todo.dueDate)
+      const deadline = todo.endTime ? new Date(todo.endTime) : new Date(todo.dueDate)
       const today = new Date()
       return (
-        dueDate.getDate() === today.getDate() &&
-        dueDate.getMonth() === today.getMonth() &&
-        dueDate.getFullYear() === today.getFullYear()
+        deadline.getDate() === today.getDate() &&
+        deadline.getMonth() === today.getMonth() &&
+        deadline.getFullYear() === today.getFullYear()
       )
     }).length
 
     return { total, completed, pending, overdue, dueToday }
-  }, [todos])
+  }, [activeTodos])
 
   // Fetch todos from database
   const fetchTodos = async () => {
@@ -350,7 +357,8 @@ export function useDatabaseTodos() {
   }, [])
 
   return {
-    todos,
+    todos,          // all tasks including archived (for search)
+    activeTodos,    // non-archived tasks (for main dashboard view)
     isLoading,
     error,
     addTodo,

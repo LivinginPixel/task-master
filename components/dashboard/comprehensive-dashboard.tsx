@@ -35,6 +35,7 @@ interface ComprehensiveDashboardProps {
 export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveDashboardProps) {
   const {
     todos,
+    activeTodos,
     isLoading,
     addTodo,
     updateTodo,
@@ -119,8 +120,8 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     // Check if user is new (no tasks) or check URL params for new signup
     const urlParams = new URLSearchParams(window.location.search)
     const isNewSignup = urlParams.get("new") === "true"
-    const hasNoTasks = todos && todos.length === 0
-    
+    const hasNoTasks = activeTodos && activeTodos.length === 0
+
     // Show onboarding for new signups or users with no tasks (first time)
     if (isNewSignup || hasNoTasks) {
       setShowOnboarding(true)
@@ -129,7 +130,7 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
         window.history.replaceState({}, '', '/dashboard')
       }
     }
-  }, [mounted, isLoading, todos])
+  }, [mounted, isLoading, activeTodos])
 
   // Handle filter change with smooth transition
   const handleFilterChange = (filter: FilterType) => {
@@ -160,19 +161,20 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [])
 
-  // Apply search query across title, description, category, tags, notes
+  // Apply search query: searches all tasks (including archived) so nothing is lost.
+  // When there is no search query, only show active (non-archived) tasks.
   const searchFilteredTasks = useMemo(() => {
-    if (!todos) return []
-    if (!searchQuery.trim()) return todos
+    const source = searchQuery.trim() ? todos : activeTodos
+    if (!searchQuery.trim()) return source
     const q = searchQuery.toLowerCase()
-    return todos.filter(t =>
+    return source.filter(t =>
       t.title.toLowerCase().includes(q) ||
       t.description?.toLowerCase().includes(q) ||
       t.category?.toLowerCase().includes(q) ||
       t.tags?.some(tag => tag.toLowerCase().includes(q)) ||
       t.notes?.toLowerCase().includes(q)
     )
-  }, [todos, searchQuery])
+  }, [todos, activeTodos, searchQuery])
 
   // Live counts for filter pills — derived from search-filtered tasks
   const filterCounts = useMemo((): FilterCounts => {
@@ -533,8 +535,8 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     }
   }
 
-  // Determine if user is new (no tasks)
-  const isNewUser = todos && todos.length === 0
+  // Determine if user is new (no active tasks)
+  const isNewUser = activeTodos && activeTodos.length === 0
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20">
@@ -555,9 +557,9 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
             <WelcomeMessage
               userName={userName}
               taskStats={{
-                total: (todos || []).length,
-                completed: (todos || []).filter(t => t.status === "COMPLETED").length,
-                dueToday: (todos || []).filter(t => {
+                total: (activeTodos || []).length,
+                completed: (activeTodos || []).filter(t => t.status === "COMPLETED").length,
+                dueToday: (activeTodos || []).filter(t => {
                   if (t.status === "COMPLETED") return false
                   const d = t.startTime || t.dueDate
                   if (!d) return false
@@ -575,7 +577,7 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
             className="space-y-3"
           >
             <StatusStrip
-              tasks={todos || []}
+              tasks={activeTodos || []}
               onToggleAnalytics={() => setShowAnalytics(v => !v)}
               showAnalytics={showAnalytics}
             />
@@ -588,7 +590,7 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
                   transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
                   className="overflow-hidden"
                 >
-                  <AnalyticsSection tasks={todos || []} />
+                  <AnalyticsSection tasks={activeTodos || []} />
                 </motion.div>
               )}
             </AnimatePresence>

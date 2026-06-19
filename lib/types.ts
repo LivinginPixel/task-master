@@ -54,6 +54,8 @@ export interface Task {
   attachments?: string[];
   createdAt: string;
   updatedAt?: string;
+  archived?: boolean;
+  archivedAt?: string | null;
 }
 
 

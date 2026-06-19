@@ -77,7 +77,8 @@ export class NotificationService {
 
   private scheduleNotificationsForTask(todo: Task) {
     if (todo.status === "COMPLETED") return
-    
+    if (todo.archived) return
+
     // Skip notifications if muted or snoozed
     if (this.shouldSkipNotifications(todo)) return
     

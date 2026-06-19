@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { motion, AnimatePresence, useMotionValue, useTransform, useDragControls } from "framer-motion"
-import { format } from "date-fns"
+import { format, formatDistanceToNow, differenceInHours, differenceInMinutes } from "date-fns"
 import { Card } from "@/components/ui/card"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import {
@@ -95,15 +95,22 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
       return undefined
     }
 
-    const dueDate = new Date(task.dueDate)
-    if (task.dueTime) {
-      const [hours, minutes] = task.dueTime.split(":").map(Number)
-      dueDate.setHours(hours, minutes, 0, 0)
-    } else {
-      dueDate.setHours(23, 59, 59, 999)
-    }
+    // Use endTime (UTC ISO) for timezone-safe overdue check.
+    // Falls back to dueDate + dueTime if endTime is absent.
+    const deadline = task.endTime
+      ? new Date(task.endTime)
+      : (() => {
+          const d = new Date(task.dueDate)
+          if (task.dueTime) {
+            const [h, m] = task.dueTime.split(":").map(Number)
+            d.setHours(h, m, 0, 0)
+          } else {
+            d.setHours(23, 59, 59, 999)
+          }
+          return d
+        })()
 
-    const isOverdueNow = dueDate < new Date()
+    const isOverdueNow = deadline < new Date()
     setIsOverdue(task.status === "OVERDUE")
 
     if (task.snoozedUntil) {
@@ -120,7 +127,7 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
     }
 
     return undefined
-  }, [task.dueDate, task.dueTime, task.status, task.id, task.snoozedUntil, onUpdate])
+  }, [task.dueDate, task.dueTime, task.endTime, task.status, task.id, task.snoozedUntil, onUpdate])
 
   const handleQuickComplete = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -172,8 +179,8 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
 
   const handleSnooze = () => {
     const snoozeUntil = new Date()
-    snoozeUntil.setHours(snoozeUntil.getHours() + 24)
-    onUpdate(task.id, { snoozedUntil: snoozeUntil.toISOString() }, "Snoozed for 1 day")
+    snoozeUntil.setMinutes(snoozeUntil.getMinutes() + 10)
+    onUpdate(task.id, { snoozedUntil: snoozeUntil.toISOString() }, "Snoozed for 10 minutes")
   }
 
   const handleUnsnooze = () => {
@@ -331,11 +338,17 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
                       className={cn(
                         "font-semibold text-[15px] leading-snug text-foreground flex-1 min-w-0",
                         isCompleted && "line-through text-muted-foreground",
-                        isOverdue && !isCompleted && "text-red-700 dark:text-red-400"
+                        isOverdue && !isCompleted && "text-red-700 dark:text-red-400",
+                        task.archived && "text-muted-foreground"
                       )}
                     >
                       {task.title}
                     </span>
+                    {task.archived && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 bg-muted/60 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                        Archived
+                      </span>
+                    )}
                   </div>
 
                   {/* Who completed this task */}
@@ -402,14 +415,52 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       {task.dueDate && (
                         <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3 flex-shrink-0" />
-                          {format(new Date(task.dueDate), "MMM d")}
-                          {task.dueTime && (
-                            <>
-                              <Clock className="h-3 w-3 flex-shrink-0 ml-0.5" />
-                              <span className="font-medium">{task.dueTime}</span>
-                            </>
-                          )}
+                          {(() => {
+                            // Use endTime (UTC) for accurate local-timezone display
+                            const deadline = task.endTime
+                              ? new Date(task.endTime)
+                              : task.dueTime
+                                ? (() => { const d = new Date(task.dueDate); const [h,m] = task.dueTime.split(":").map(Number); d.setHours(h,m,0,0); return d })()
+                                : new Date(task.dueDate)
+                            const now = new Date()
+                            const hoursUntil = differenceInHours(deadline, now)
+                            const minsUntil = differenceInMinutes(deadline, now)
+                            // Show relative time only when within 24 hours
+                            if (!isOverdue && !isCompleted && minsUntil > 0 && hoursUntil < 24) {
+                              const h = Math.floor(minsUntil / 60)
+                              const m = minsUntil % 60
+                              const label = h > 0
+                                ? (m > 0 ? `${h}h ${m}m` : `${h}h`)
+                                : `${m}m`
+                              return (
+                                <>
+                                  <Clock className="h-3 w-3 flex-shrink-0" />
+                                  <span className="font-medium text-amber-600 dark:text-amber-400">due in {label}</span>
+                                </>
+                              )
+                            }
+                            // Overdue: show how long ago
+                            if (isOverdue && !isCompleted && minsUntil < 0) {
+                              return (
+                                <>
+                                  <Clock className="h-3 w-3 flex-shrink-0 text-red-500" />
+                                  <span className="font-medium text-red-600 dark:text-red-400">
+                                    {formatDistanceToNow(deadline, { addSuffix: true })}
+                                  </span>
+                                </>
+                              )
+                            }
+                            // Beyond 24h or completed: show date
+                            return (
+                              <>
+                                <Calendar className="h-3 w-3 flex-shrink-0" />
+                                {format(deadline, "MMM d")}
+                                {task.endTime && (
+                                  <span className="font-medium ml-0.5">{format(deadline, "h:mm a")}</span>
+                                )}
+                              </>
+                            )
+                          })()}
                         </span>
                       )}
                       {totalSubtasks > 0 && (
@@ -497,7 +548,7 @@ export function EnhancedTaskCard({ task, onUpdate, onDelete, onEdit, onDuplicate
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={isSnoozed ? handleUnsnooze : handleSnooze}>
                           <Clock3 className="h-3.5 w-3.5 mr-2" />
-                          {isSnoozed ? "Clear Snooze" : "Snooze 1 Day"}
+                          {isSnoozed ? "Clear Snooze" : "Snooze 10 min"}
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={handleToggleMute}>
                           {task.notificationsMuted
