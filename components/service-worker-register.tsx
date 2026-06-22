@@ -2,6 +2,7 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { NotificationService } from "@/lib/services/notifications"
 
 function urlBase64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
@@ -44,7 +45,7 @@ export function ServiceWorkerRegister() {
         await subscribeToPush(reg)
 
         navigator.serviceWorker.addEventListener("message", (event) => {
-          const { type, taskId, navigateTo } = event.data || {}
+          const { type, taskId, notificationType, navigateTo } = event.data || {}
 
           if (type === "NOTIFICATION_CLICK") {
             if (navigateTo) {
@@ -60,6 +61,11 @@ export function ServiceWorkerRegister() {
 
           if (type === "NOTIFICATION_FIRED") {
             window.dispatchEvent(new CustomEvent("tm:refresh-tasks"))
+            // Sync the main-thread dedup state so the 5-minute monitoring
+            // interval doesn't re-fire the same notification.
+            if (taskId) {
+              NotificationService.getInstance().markNotificationFired(taskId, notificationType)
+            }
           }
         })
 

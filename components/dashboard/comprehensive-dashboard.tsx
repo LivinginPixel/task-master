@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { Search, X, List, LayoutGrid, CalendarDays } from "lucide-react"
 import { useDatabaseTodos } from "@/hooks/use-db-tasks"
@@ -66,6 +66,11 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
   const selectionMode = selectedTasks.size > 0
   const [shieldTask, setShieldTask] = useState<Task | null>(null)
 
+  // Ref so the notification service closure always sees the latest todos
+  // without triggering startMonitoring on every task update
+  const todosRef = useRef<Task[]>([])
+  useEffect(() => { todosRef.current = todos || [] }, [todos])
+
   useEffect(() => {
     setMounted(true)
   }, [])
@@ -98,20 +103,19 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     }
   }, [todos, refetch])
 
-  // Initialize notification service
+  // Initialize notification service once after initial load.
+  // Uses todosRef so the scheduler always reads the latest tasks without
+  // clearing and re-scheduling on every optimistic update or sync.
   useEffect(() => {
     if (!mounted || isLoading) return
-    
+
     const notificationService = NotificationService.getInstance()
-    
-    // Request notification permission
     notificationService.requestNotificationPermission()
-    
-    // Start monitoring tasks with a function that gets fresh todos
-    const cleanup = notificationService.startMonitoring(() => todos || [])
-    
+    const cleanup = notificationService.startMonitoring(() => todosRef.current)
+
     return () => cleanup()
-  }, [mounted, isLoading, todos])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted, isLoading])
 
   // Check if we should show onboarding after data loads
   useEffect(() => {
@@ -457,47 +461,46 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     
     // Immediately update notification service if any notification-related fields changed
     // This includes: time fields (startTime, endTime, dueDate, dueTime), notification settings, or status
-    const shouldUpdateNotifications = 
-      updates.notificationsMuted !== undefined || 
-      updates.snoozedUntil !== undefined ||
+    const timesChanged =
       updates.startTime !== undefined ||
       updates.endTime !== undefined ||
       updates.dueDate !== undefined ||
       updates.dueTime !== undefined ||
-      updates.notifyOnStart !== undefined ||
+      updates.notifyOnStart !== undefined
+
+    const shouldUpdateNotifications =
+      timesChanged ||
+      updates.notificationsMuted !== undefined ||
+      updates.snoozedUntil !== undefined ||
       updates.status !== undefined
-    
+
     if (shouldUpdateNotifications) {
-      // Use a small delay to ensure state has updated
       setTimeout(() => {
-        const updatedTask = todos?.find(t => t.id === id)
+        const updatedTask = todosRef.current.find(t => t.id === id)
         if (updatedTask) {
           const notificationService = NotificationService.getInstance()
-          notificationService.updateTaskNotifications(updatedTask)
+          notificationService.updateTaskNotifications(updatedTask, timesChanged)
         }
       }, 200)
     }
-    
+
     // Check if this is a duplicated task with completed subtasks
     // If so, mute notifications on the original task
     if (updates.subtasks && updates.subtasks.length > 0) {
-      // Wait a bit for the update to complete, then check
       setTimeout(() => {
-        const task = todos?.find(t => t.id === id)
+        const task = todosRef.current.find(t => t.id === id)
         if (task?.duplicatedFromTaskId) {
           const completedCount = updates.subtasks!.filter(st => st.completed).length
-          
-          // If at least one subtask is completed, mute the original task
+
           if (completedCount > 0) {
-            const originalTask = todos?.find(t => t.id === task.duplicatedFromTaskId)
+            const originalTask = todosRef.current.find(t => t.id === task.duplicatedFromTaskId)
             if (originalTask && !originalTask.notificationsMuted && !originalTask.partiallyResolved) {
               updateTodo(originalTask.id, {
                 notificationsMuted: true,
                 partiallyResolved: true,
               }, "Original task alerts muted (subtasks completed in duplicate)").then(() => {
-                // Update notification service for the original task too
                 setTimeout(() => {
-                  const mutedTask = todos?.find(t => t.id === originalTask.id)
+                  const mutedTask = todosRef.current.find(t => t.id === originalTask.id)
                   if (mutedTask) {
                     const notificationService = NotificationService.getInstance()
                     notificationService.updateTaskNotifications(mutedTask)

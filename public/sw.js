@@ -124,7 +124,7 @@ async function fireNotification(task, notificationType) {
     actions: [{ action: 'open', title: 'View task' }, { action: 'complete', title: 'Mark done' }],
   });
   const clients = await self.clients.matchAll();
-  clients.forEach(c => c.postMessage({ type: 'NOTIFICATION_FIRED', taskId: task.id, notificationType }));
+  clients.forEach(c => c.postMessage({ type: 'NOTIFICATION_FIRED', taskId: task.id, notificationType, title, body }));
 }
 
 // ─── IndexedDB ────────────────────────────────────────────────────────────────
