@@ -94,14 +94,17 @@ export async function updateOverdueTasks(dbInstance: DB = db) {
     const nextStart = task.start_time ? advanceDate(task.start_time, rt, ri) : null
     const nextEnd   = task.end_time   ? advanceDate(task.end_time,   rt, ri) : null
 
-    // Mark this occurrence as silently completed (no "completed" badge needed —
-    // it was a scheduled event that has passed).
-    await dbInstance
+    // Atomically claim this completion. PostgreSQL row-level locking ensures
+    // only one concurrent caller gets a non-empty result here — the other sees
+    // status already COMPLETED and gets 0 rows, so it skips the INSERT.
+    const claimed = await dbInstance
       .update(tasks)
       .set({ status: "COMPLETED", completed_at: now, updated_at: now })
-      .where(eq(tasks.id, task.id))
+      .where(and(eq(tasks.id, task.id), eq(tasks.status, "PENDING")))
+      .returning({ id: tasks.id })
 
-    // Spawn next occurrence
+    if (claimed.length === 0) continue
+
     await dbInstance.insert(tasks).values({
       user_id:            task.user_id,
       title:              task.title,

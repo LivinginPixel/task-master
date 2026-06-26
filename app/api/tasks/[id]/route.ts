@@ -417,7 +417,13 @@ export async function PATCH(
       const nextStart = currentTask.start_time ? advanceDate(currentTask.start_time, rt, ri) : null
       const nextEnd = currentTask.end_time ? advanceDate(currentTask.end_time, rt, ri) : null
 
-      if (nextDue) {
+      const existingNext = await db
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.parent_task_id, currentTask.id))
+        .limit(1)
+
+      if (nextDue && existingNext.length === 0) {
         await db.insert(tasks).values({
           user_id: userId,
           title: currentTask.title,

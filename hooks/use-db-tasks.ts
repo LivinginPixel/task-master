@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useSession } from "next-auth/react"
 import type { Task } from "../lib/types"
 import { useToast } from "@/components/ui/use-toast"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 // Replace localStorage operations with API interactions
 export function useDatabaseTodos() {
@@ -10,6 +12,7 @@ export function useDatabaseTodos() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
   const { toast } = useToast()
+  const { data: session } = useSession()
 
   // Active (non-archived) tasks — the main working set
   const activeTodos = useMemo(() => todos.filter(t => !t.archived), [todos])
@@ -324,37 +327,50 @@ export function useDatabaseTodos() {
     fetchTodos()
   }, [])
 
-  // Background sync — poll every 15s so collaborators see changes without refreshing.
-  // Runs silently (no loading spinner). Pauses when the tab is hidden.
+  // Real-time sync via Supabase Realtime.
+  // Subscribes to postgres_changes on the tasks table for this user's rows,
+  // and on task_collaborators for any collaboration changes.
+  // Falls back to a single refetch on tab-focus for resilience.
   useEffect(() => {
-    const POLL_MS = 15_000
+    const userId = session?.user?.id
+    const supabase = getSupabaseBrowserClient()
 
-    const sync = async () => {
+    const silentRefetch = async () => {
       try {
         const res = await fetch("/api/tasks")
         if (!res.ok) return
-        const data = await res.json()
-        setTodos(data)
-      } catch {
-        // silent — don't disrupt the user if background sync fails
-      }
+        setTodos(await res.json())
+      } catch {}
     }
 
-    const interval = setInterval(() => {
-      if (!document.hidden) sync()
-    }, POLL_MS)
-
-    // Sync immediately when the user returns to the tab
     const handleVisibility = () => {
-      if (!document.hidden) sync()
+      if (!document.hidden) silentRefetch()
     }
     document.addEventListener("visibilitychange", handleVisibility)
 
+    if (!userId || !supabase) {
+      return () => document.removeEventListener("visibilitychange", handleVisibility)
+    }
+
+    const channel = supabase
+      .channel(`tasks-user-${userId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tasks', filter: `user_id=eq.${userId}` },
+        () => silentRefetch()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'task_collaborators', filter: `user_id=eq.${userId}` },
+        () => silentRefetch()
+      )
+      .subscribe()
+
     return () => {
-      clearInterval(interval)
+      supabase.removeChannel(channel)
       document.removeEventListener("visibilitychange", handleVisibility)
     }
-  }, [])
+  }, [session?.user?.id])
 
   return {
     todos,          // all tasks including archived (for search)
