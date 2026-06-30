@@ -20,11 +20,8 @@ export function TaskList() {
   }, []);
 
   useEffect(() => {
-    const notificationService = NotificationService.getInstance();
-    notificationService.requestNotificationPermission();
-    const cleanup = notificationService.startMonitoring(tasks);
-    return () => cleanup();
-  }, [tasks]);
+    NotificationService.getInstance().requestNotificationPermission();
+  }, []);
 
   const fetchTasks = async () => {
     try {

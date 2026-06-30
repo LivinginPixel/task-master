@@ -31,6 +31,10 @@ self.addEventListener('push', (event) => {
       vibrate: [200, 100, 200],
       data: { taskId, type, url: taskId ? `/dashboard?task=${taskId}` : '/dashboard' },
       actions: taskId ? [{ action: 'open', title: 'View task' }, { action: 'complete', title: 'Mark done' }] : [],
+    }).then(async () => {
+      // Tell open clients to refresh their task list — a collaborator event arrived.
+      const clients = await self.clients.matchAll({ type: 'window' });
+      clients.forEach(c => c.postMessage({ type: 'PUSH_RECEIVED', taskId, notificationType: type }));
     })
   );
 });
@@ -66,6 +70,10 @@ self.addEventListener('notificationclick', (event) => {
   })());
 });
 
+// Track notifications that already have a pending setTimeout so syncStoredNotifications
+// doesn't create a duplicate timeout for the same entry.
+const pendingTimeouts = new Set();
+
 // ─── Messages from main thread ────────────────────────────────────────────────
 self.addEventListener('message', (event) => {
   const { type } = event.data || {};
@@ -81,7 +89,10 @@ self.addEventListener('message', (event) => {
           return fireNotification(task, notificationType)
             .then(() => cancelNotification(taskId, notificationType));
         } else if (delay > 0) {
+          const key = `${taskId}-${notificationType}`;
+          pendingTimeouts.add(key);
           setTimeout(() => {
+            pendingTimeouts.delete(key);
             fireNotification(task, notificationType).catch(() => {});
             cancelNotification(taskId, notificationType).catch(() => {});
           }, delay);
@@ -164,9 +175,22 @@ async function syncStoredNotifications() {
     for (const n of all) {
       const delay = n.scheduledTime - now;
       const task = JSON.parse(n.task);
-      if (delay <= 0 && delay > -60000) { fireNotification(task, n.notificationType); cancelNotification(n.taskId, n.notificationType); }
-      else if (delay > 0) setTimeout(() => { fireNotification(task, n.notificationType); cancelNotification(n.taskId, n.notificationType); }, delay);
-      else cancelNotification(n.taskId, n.notificationType);
+      const key = `${n.taskId}-${n.notificationType}`;
+      if (delay <= 0 && delay > -60000) {
+        fireNotification(task, n.notificationType);
+        cancelNotification(n.taskId, n.notificationType);
+      } else if (delay > 0 && !pendingTimeouts.has(key)) {
+        // Only create a new timeout if SCHEDULE_NOTIFICATION didn't already register one,
+        // otherwise both timeouts fire the same notification.
+        pendingTimeouts.add(key);
+        setTimeout(() => {
+          pendingTimeouts.delete(key);
+          fireNotification(task, n.notificationType);
+          cancelNotification(n.taskId, n.notificationType);
+        }, delay);
+      } else if (delay <= -60000) {
+        cancelNotification(n.taskId, n.notificationType);
+      }
     }
   } catch {}
 }

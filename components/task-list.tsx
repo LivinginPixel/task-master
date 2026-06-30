@@ -75,18 +75,10 @@ export default function TodoList() {
     };
   }, [stats, overdueCount]);
 
-  // Initialize notification service
+  // Request permission once; startMonitoring is owned by ComprehensiveDashboard.
   useEffect(() => {
-    const notificationService = NotificationService.getInstance()
-    
-    // Request notification permission
-    notificationService.requestNotificationPermission()
-    
-    // Start monitoring tasks
-    const cleanup = notificationService.startMonitoring(todos)
-    
-    return () => cleanup()
-  }, [todos])
+    NotificationService.getInstance().requestNotificationPermission()
+  }, [])
 
   // Keyboard shortcuts
   useEffect(() => {

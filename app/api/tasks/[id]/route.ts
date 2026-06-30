@@ -34,18 +34,29 @@ function advanceDate(base: Date, recurrenceType: string, interval: number): Date
   return next
 }
 
-/**
- * Given the current occurrence's due date, compute the next due date.
- * Falls back to "today → advance" if no due date is set.
- */
-function computeNextDueDate(
+// Advance directly to the next FUTURE due date. Same logic as updateOverdueTasks
+// so manual completion and auto-completion behave identically.
+function computeNextFutureDueDate(
   currentDue: Date | null,
   recurrenceType: string,
   interval: number
-): Date | null {
-  if (!recurrenceType) return null
-  const base = currentDue ? new Date(currentDue) : new Date()
-  return advanceDate(base, recurrenceType, interval)
+): { date: Date | null; steps: number } {
+  if (!recurrenceType) return { date: null, steps: 0 }
+  const now = new Date()
+  let d = currentDue ? new Date(currentDue) : new Date(now)
+  let steps = 0
+  while (d <= now) {
+    d = advanceDate(d, recurrenceType, interval)
+    steps++
+  }
+  return { date: d, steps }
+}
+
+function advanceBySteps(base: Date | null, recurrenceType: string, interval: number, steps: number): Date | null {
+  if (!base || steps === 0) return base
+  let d = new Date(base)
+  for (let i = 0; i < steps; i++) d = advanceDate(d, recurrenceType, interval)
+  return d
 }
 
 const updateTaskSchema = z.object({
@@ -411,11 +422,12 @@ export async function PATCH(
       const rt = currentTask.recurrence_type
       const ri = currentTask.recurrence_interval ?? 1
 
-      const nextDue = computeNextDueDate(currentTask.due_date, rt, ri)
-
-      // Advance start_time and end_time by the same calendar distance
-      const nextStart = currentTask.start_time ? advanceDate(currentTask.start_time, rt, ri) : null
-      const nextEnd = currentTask.end_time ? advanceDate(currentTask.end_time, rt, ri) : null
+      // Advance directly to the next FUTURE due date in one shot — same as updateOverdueTasks.
+      // A single-interval advance may still be in the past for long-overdue recurring tasks,
+      // which would cause the same Realtime-triggered cascade bug in updateOverdueTasks.
+      const { date: nextDue, steps } = computeNextFutureDueDate(currentTask.due_date, rt, ri)
+      const nextStart = advanceBySteps(currentTask.start_time, rt, ri, steps)
+      const nextEnd   = advanceBySteps(currentTask.end_time,   rt, ri, steps)
 
       const existingNext = await db
         .select({ id: tasks.id })
@@ -437,7 +449,7 @@ export async function PATCH(
           due_time: currentTask.due_time,
           start_time: nextStart,
           end_time: nextEnd,
-          locked_after_due: currentTask.locked_after_due,
+          locked_after_due: false,
           notify_on_start: currentTask.notify_on_start,
           recurrence_type: rt,
           recurrence_interval: ri,
@@ -448,16 +460,38 @@ export async function PATCH(
 
     if (!updatedTask) return NextResponse.json({ error: "Task not found after update" }, { status: 404 })
 
-    // Notify accepted collaborators that the task was updated
-    const collabs = await db.select({ user_id: taskCollaborators.user_id })
-      .from(taskCollaborators)
-      .where(and(
-        eq(taskCollaborators.task_id, params.id),
-        eq(taskCollaborators.invite_status, "accepted")
-      ))
-    for (const c of collabs) {
-      if (c.user_id && c.user_id !== session.user.id) {
-        sendTaskPush(c.user_id, "completed", updatedTask.title, updatedTask.id).catch(() => {})
+    // Notify all participants (owner + collaborators) except the person making the change.
+    // Only send for meaningful changes — not internal fields like mute/snooze/deferCount.
+    const isCollaboratorAction = !isOwner
+    const isMeaningfulChange =
+      body.status !== undefined ||
+      body.title !== undefined ||
+      body.description !== undefined ||
+      body.dueDate !== undefined ||
+      body.dueTime !== undefined ||
+      body.priority !== undefined ||
+      body.subtasks !== undefined
+
+    if (isMeaningfulChange) {
+      const pushType = isCompleting ? "completed" : "updated"
+
+      const collabs = await db.select({ user_id: taskCollaborators.user_id })
+        .from(taskCollaborators)
+        .where(and(
+          eq(taskCollaborators.task_id, params.id),
+          eq(taskCollaborators.invite_status, "accepted")
+        ))
+
+      // Collaborators who should be notified (everyone except the actor)
+      const recipientIds = new Set<string>()
+      for (const c of collabs) {
+        if (c.user_id && c.user_id !== session.user.id) recipientIds.add(c.user_id)
+      }
+      // If a collaborator made the change, also notify the task owner
+      if (isCollaboratorAction) recipientIds.add(currentTask.user_id)
+
+      for (const uid of recipientIds) {
+        sendTaskPush(uid, pushType, updatedTask.title, updatedTask.id).catch(() => {})
       }
     }
 

@@ -66,10 +66,19 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
   const selectionMode = selectedTasks.size > 0
   const [shieldTask, setShieldTask] = useState<Task | null>(null)
 
-  // Ref so the notification service closure always sees the latest todos
-  // without triggering startMonitoring on every task update
+  // todosRef gives the notification service a stable getter for the latest tasks
+  // without re-triggering startMonitoring on every Realtime update.
   const todosRef = useRef<Task[]>([])
   useEffect(() => { todosRef.current = todos || [] }, [todos])
+
+  // refetchRef stabilises the refetch callback so the event-listener effect
+  // doesn't re-register listeners on every render (refetch is recreated each render).
+  const refetchRef = useRef(refetch)
+  useEffect(() => { refetchRef.current = refetch }, [refetch])
+
+  // Guard: startMonitoring runs exactly once per component mount — never again.
+  // isLoading re-runs toggle the effect but the ref prevents double-calling.
+  const notifStartedRef = useRef(false)
 
   useEffect(() => {
     setMounted(true)
@@ -80,9 +89,11 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
     if (!detailTask) return
     const updated = todos.find(t => t.id === detailTask.id)
     if (updated) setDetailTask(updated)
-  }, [todos])
+  }, [todos]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Listen for service worker notification click events
+  // Listen for service worker notification click events and task refreshes.
+  // Uses refs so this effect only re-runs when todos changes (for handleOpenTask),
+  // not every render due to unstable refetch reference.
   useEffect(() => {
     const handleOpenTask = (e: Event) => {
       const taskId = (e as CustomEvent<{ taskId: string }>).detail?.taskId
@@ -93,7 +104,7 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
         setDetailSheetOpen(true)
       }
     }
-    const handleRefresh = () => { refetch() }
+    const handleRefresh = () => { refetchRef.current() }
 
     window.addEventListener("tm:open-task", handleOpenTask)
     window.addEventListener("tm:refresh-tasks", handleRefresh)
@@ -101,21 +112,26 @@ export function ComprehensiveDashboard({ userName, defaultView }: ComprehensiveD
       window.removeEventListener("tm:open-task", handleOpenTask)
       window.removeEventListener("tm:refresh-tasks", handleRefresh)
     }
-  }, [todos, refetch])
+  }, [todos])
 
-  // Initialize notification service once after initial load.
-  // Uses todosRef so the scheduler always reads the latest tasks without
-  // clearing and re-scheduling on every optimistic update or sync.
+  // Start notification monitoring exactly once after the initial task load.
+  // Subsequent isLoading toggles (from manual refreshes or PUSH_RECEIVED) are
+  // ignored — the ref guard prevents re-running startMonitoring.
   useEffect(() => {
-    if (!mounted || isLoading) return
-
+    if (!mounted || isLoading || notifStartedRef.current) return
+    notifStartedRef.current = true
     const notificationService = NotificationService.getInstance()
     notificationService.requestNotificationPermission()
-    const cleanup = notificationService.startMonitoring(() => todosRef.current)
-
-    return () => cleanup()
+    notificationService.startMonitoring(() => todosRef.current)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mounted, isLoading])
+
+  // When Realtime delivers tasks added on other devices, schedule their notifications.
+  // Only new tasks (not already tracked) are processed — existing timers are untouched.
+  useEffect(() => {
+    if (!notifStartedRef.current || !todos) return
+    NotificationService.getInstance().syncNewTasks(todos)
+  }, [todos])
 
   // Check if we should show onboarding after data loads
   useEffect(() => {

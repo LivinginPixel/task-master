@@ -28,6 +28,32 @@ function advanceDate(base: Date, recurrenceType: string, interval: number): Date
   return next
 }
 
+// Advance a date repeatedly until it is strictly in the future, returning
+// both the resulting date and the number of steps taken. The steps count is
+// used to advance start_time / end_time by the same calendar distance.
+function advanceToFuture(
+  base: Date | null,
+  recurrenceType: string,
+  interval: number,
+  now: Date
+): { date: Date | null; steps: number } {
+  if (!base) return { date: null, steps: 0 }
+  let d = new Date(base)
+  let steps = 0
+  while (d <= now) {
+    d = advanceDate(d, recurrenceType, interval)
+    steps++
+  }
+  return { date: d, steps }
+}
+
+function advanceBySteps(base: Date | null, recurrenceType: string, interval: number, steps: number): Date | null {
+  if (!base || steps === 0) return base
+  let d = new Date(base)
+  for (let i = 0; i < steps; i++) d = advanceDate(d, recurrenceType, interval)
+  return d
+}
+
 // ─── Core function ────────────────────────────────────────────────────────────
 
 /**
@@ -90,9 +116,13 @@ export async function updateOverdueTasks(dbInstance: DB = db) {
     const rt = task.recurrence_type!
     const ri = task.recurrence_interval ?? 1
 
-    const nextDue  = advanceDate(task.due_date ?? new Date(), rt, ri)
-    const nextStart = task.start_time ? advanceDate(task.start_time, rt, ri) : null
-    const nextEnd   = task.end_time   ? advanceDate(task.end_time,   rt, ri) : null
+    // Advance directly to the next FUTURE due date in one shot.
+    // A single-interval advance would still be in the past for long-overdue tasks,
+    // causing a Realtime cascade: each completion event triggers another GET →
+    // updateOverdueTasks → another completion → another event, creating duplicate tasks.
+    const { date: nextDue, steps } = advanceToFuture(task.due_date ?? now, rt, ri, now)
+    const nextStart = advanceBySteps(task.start_time, rt, ri, steps)
+    const nextEnd   = advanceBySteps(task.end_time,   rt, ri, steps)
 
     // Atomically claim this completion. PostgreSQL row-level locking ensures
     // only one concurrent caller gets a non-empty result here — the other sees

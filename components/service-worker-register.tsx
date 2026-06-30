@@ -60,12 +60,19 @@ export function ServiceWorkerRegister() {
           }
 
           if (type === "NOTIFICATION_FIRED") {
-            window.dispatchEvent(new CustomEvent("tm:refresh-tasks"))
-            // Sync the main-thread dedup state so the 5-minute monitoring
-            // interval doesn't re-fire the same notification.
+            // Sync dedup state so the 5-min interval doesn't re-fire the same notification.
+            // Do NOT dispatch tm:refresh-tasks here — that would toggle isLoading,
+            // re-run startMonitoring, and fire overdue notifications again.
             if (taskId) {
               NotificationService.getInstance().markNotificationFired(taskId, notificationType)
             }
+          }
+
+          if (type === "PUSH_RECEIVED") {
+            // A server-push arrived (collaborator event) — refresh the task list.
+            // This is separate from NOTIFICATION_FIRED so we only refresh on real
+            // data changes (collaborator actions), not on scheduled in-app alerts.
+            window.dispatchEvent(new CustomEvent("tm:refresh-tasks"))
           }
         })
 

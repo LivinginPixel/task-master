@@ -55,15 +55,16 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
 // Send push for a task event
 export async function sendTaskPush(
   userId: string,
-  type: "due-soon" | "overdue" | "shared" | "completed",
+  type: "due-soon" | "overdue" | "shared" | "completed" | "updated",
   taskTitle: string,
   taskId: string
 ) {
   const messages = {
-    "due-soon":  { title: "⏰ Task due soon",   body: `"${taskTitle}" is coming up` },
-    "overdue":   { title: "⚠️ Task overdue",    body: `"${taskTitle}" is past its deadline` },
-    "shared":    { title: "🔗 Task shared",     body: `Someone shared a task with you: "${taskTitle}"` },
-    "completed": { title: "✅ Task complete",   body: `"${taskTitle}" was marked complete` },
+    "due-soon":  { title: "⏰ Task due soon",      body: `"${taskTitle}" is coming up` },
+    "overdue":   { title: "⚠️ Task overdue",       body: `"${taskTitle}" is past its deadline` },
+    "shared":    { title: "🔗 Task shared",        body: `Someone shared a task with you: "${taskTitle}"` },
+    "completed": { title: "✅ Task completed",     body: `"${taskTitle}" was marked complete` },
+    "updated":   { title: "📝 Task updated",       body: `"${taskTitle}" was updated by a collaborator` },
   }
   const msg = messages[type]
   return sendPushToUser(userId, { ...msg, taskId, type })

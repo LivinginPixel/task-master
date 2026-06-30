@@ -176,13 +176,13 @@ export class NotificationService {
             }, timeTo5MinBefore))
           }
         } else if (timeToStart > 0) {
-          // Already inside the 5-minute window — fire immediately
-          setTimeout(() => {
+          // Already inside the 5-minute window — fire immediately (tracked so clearScheduled can cancel)
+          timeouts.push(setTimeout(() => {
             const fresh = this.freshTask(todo.id) ?? todo
             if (!this.shouldSkipNotifications(fresh) && fresh.notifyOnStart !== false) {
               this.fire(fresh, 'start-5min-before')
             }
-          }, 100)
+          }, 100))
         }
       }
     }
@@ -226,11 +226,11 @@ export class NotificationService {
     schedule('5min-before',  timeToDue -  5 * 60 * 1000)
 
     if (timeToDue > 0 && timeToDue < 5 * 60 * 1000) {
-      // Inside the 5-minute window — fire immediately
-      setTimeout(() => {
+      // Inside the 5-minute window — fire immediately (tracked so clearScheduled can cancel)
+      timeouts.push(setTimeout(() => {
         const fresh = this.freshTask(todo.id) ?? todo
         if (!this.shouldSkipNotifications(fresh)) this.fire(fresh, '5min-before')
-      }, 100)
+      }, 100))
     }
 
     // due-now
@@ -339,7 +339,7 @@ export class NotificationService {
 
   // ─── Public API ─────────────────────────────────────────────────────────────
 
-  public startMonitoring(todos: Task[] | (() => Task[])) {
+  public startMonitoring(todos: Task[] | (() => Task[])): void {
     // Cancel all pending in-browser timeouts
     this.scheduled.forEach(timeouts => timeouts.forEach(clearTimeout))
     this.scheduled.clear()
@@ -353,20 +353,26 @@ export class NotificationService {
       this.currentTodos = todos()
     } else {
       this.currentTodos = todos
-      this.getFreshTodos = () => todos
+      this.getFreshTodos = null
     }
 
     this.currentTodos.forEach(todo => this.scheduleNotificationsForTask(todo))
+    // No polling interval — Supabase Realtime keeps todosRef live and
+    // the dashboard calls syncNewTasks() whenever new tasks arrive.
+  }
 
-    // Re-check every 5 minutes to pick up tasks added on other devices
-    const interval = setInterval(() => {
-      if (this.getFreshTodos) {
-        this.currentTodos = this.getFreshTodos()
-        this.currentTodos.forEach(todo => this.scheduleNotificationsForTask(todo))
+  // Called by the dashboard when Realtime delivers new tasks from other devices.
+  // Only schedules tasks that aren't already tracked — never cancels existing timers.
+  public syncNewTasks(todos: Task[]): void {
+    const knownIds = new Set(this.currentTodos.map(t => t.id))
+    for (const todo of todos) {
+      if (!knownIds.has(todo.id)) {
+        this.currentTodos.push(todo)
+        if (todo.status !== 'COMPLETED' && !todo.archived) {
+          this.scheduleNotificationsForTask(todo)
+        }
       }
-    }, 5 * 60 * 1000)
-
-    return () => clearInterval(interval)
+    }
   }
 
   // Re-schedule a single task after it was created or its times changed.
